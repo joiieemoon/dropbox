@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" width="100%" height="100%">
+  <g fill="none" stroke="#465FFF" stroke-width="8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M 120,20 L 155,40 L 120,60 L 85,40 Z" />
+    <path d="M 120,60 L 120,100" />
+    <path d="M 85,40 L 85,80" />
+    <path d="M 155,40 L 155,80" />
+    <path d="M 85,80 L 120,100 L 155,80" />
+
+    <path d="M 85,80 L 50,100 L 50,140 L 85,160 L 120,140 L 120,100" />
+    <path d="M 85,160 L 85,120 L 50,100" />
+    <path d="M 85,120 L 120,100" />
+    <path d="M 68,115 L 60,120 L 68,125" stroke-width="6" />
+    <path d="M 98,112 L 98,132" stroke-width="6" />
+    <path d="M 98,112 L 108,112 L 112,117 L 108,122 L 98,122" stroke-width="6" />
+    <path d="M 106,122 L 112,132" stroke-width="6" />
+
+    <path d="M 120,100 L 155,80 L 190,100 L 190,140 L 155,160 L 120,140" />
+    <path d="M 155,160 L 155,120 L 190,100" />
+    <path d="M 155,120 L 120,100" />
+    <path d="M 138,112 L 138,132" stroke-width="6" />
+    <path d="M 148,112 L 148,132" stroke-width="6" />
+    <path d="M 160,112 L 149,122 L 160,132" stroke-width="6" />
+    
+    <path d="M 85,160 L 120,180 L 155,160" />
+    <path d="M 120,140 L 120,180" />
+  </g>
+</svg>

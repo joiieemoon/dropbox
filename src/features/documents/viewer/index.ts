@@ -1,0 +1,1 @@
+export { default as SecureViewer } from "./components/SecureViewer";
