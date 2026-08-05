@@ -1,23 +1,21 @@
 /**
  * Beacon API - receives telemetry payloads from the viewer.
- * Mocked for the POC; swap with a real endpoint later.
+ * Posts to the real Express backend at http://localhost:4000.
  */
 
+import { backendClient } from "./backendClient";
 import { mockApi } from "./mockData";
 import type { BeaconPayload } from "../types";
 
 /**
- * Send a beacon payload. In production this would POST to a
- * telemetry endpoint. For the POC we store it in the mock store.
+ * Send a beacon payload. POSTs to the backend telemetry endpoint.
+ * Falls back to the mock store if the backend is unreachable.
  */
 export async function sendBeacon(payload: BeaconPayload): Promise<void> {
-  // Simulate a fire-and-forget network call.
-  mockApi.addBeacon(payload);
-  // In a real implementation:
-  // await fetch("/api/beacon", {
-  //   method: "POST",
-  //   headers: { "Content-Type": "application/json" },
-  //   body: JSON.stringify(payload),
-  //   keepalive: true,
-  // });
+  try {
+    await backendClient.post("/api/views/beacon", payload);
+  } catch {
+    // Backend unreachable — store locally for the POC.
+    mockApi.addBeacon(payload);
+  }
 }

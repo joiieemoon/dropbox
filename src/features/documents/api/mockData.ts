@@ -28,6 +28,7 @@ const seedDocuments: Document[] = [
     pageCount: 8,
     uploadedAt: "2026-07-28T09:12:00.000Z",
     sizeBytes: 2_400_000,
+    sharedWith: ["rec_1", "rec_2"],
   },
   {
     id: "doc_2",
@@ -36,6 +37,7 @@ const seedDocuments: Document[] = [
     pageCount: 12,
     uploadedAt: "2026-07-30T14:05:00.000Z",
     sizeBytes: 3_100_000,
+    sharedWith: ["rec_3"],
   },
   {
     id: "doc_3",
@@ -44,16 +46,17 @@ const seedDocuments: Document[] = [
     pageCount: 6,
     uploadedAt: "2026-08-01T11:30:00.000Z",
     sizeBytes: 1_800_000,
+    sharedWith: [],
   },
 ];
 
 /** Seed recipients. */
 const seedRecipients: Recipient[] = [
-  { id: "rec_1", email: "alice@acme.com", name: "Alice Johnson" },
-  { id: "rec_2", email: "bob@globex.com", name: "Bob Smith" },
-  { id: "rec_3", email: "carol@initech.com", name: "Carol White" },
-  { id: "rec_4", email: "dave@umbrella.com", name: "Dave Brown" },
-  { id: "rec_5", email: "erin@stark.com", name: "Erin Davis" },
+  { id: "rec_1", email: "alice@acme.com", name: "Alice Johnson", username: "alice" },
+  { id: "rec_2", email: "bob@globex.com", name: "Bob Smith", username: "bob" },
+  { id: "rec_3", email: "carol@initech.com", name: "Carol White", username: "carol" },
+  { id: "rec_4", email: "dave@umbrella.com", name: "Dave Brown", username: "dave" },
+  { id: "rec_5", email: "erin@stark.com", name: "Erin Davis", username: "erin" },
 ];
 
 /** Seed tracking links. */
@@ -126,6 +129,7 @@ function seedRecipientAnalytics(): RecipientAnalytics[] {
       recipientId: "rec_1",
       email: "alice@acme.com",
       name: "Alice Johnson",
+      username: "alice",
       emailOpened: true,
       firstAccessAt: new Date(Date.now() - 2 * 60_000).toISOString(),
       totalDurationSec: 184,
@@ -137,6 +141,7 @@ function seedRecipientAnalytics(): RecipientAnalytics[] {
       recipientId: "rec_2",
       email: "bob@globex.com",
       name: "Bob Smith",
+      username: "bob",
       emailOpened: true,
       firstAccessAt: new Date(Date.now() - 5 * 60_000).toISOString(),
       totalDurationSec: 96,
@@ -161,6 +166,7 @@ function seedRecipientAnalytics(): RecipientAnalytics[] {
       recipientId: "rec_3",
       email: "carol@initech.com",
       name: "Carol White",
+      username: "carol",
       emailOpened: false,
       firstAccessAt: null,
       totalDurationSec: 0,
@@ -219,6 +225,7 @@ function seedDocumentAnalytics(): DocumentAnalytics[] {
           recipientId: "rec_3",
           email: "carol@initech.com",
           name: "Carol White",
+          username: "carol",
           emailOpened: true,
           firstAccessAt: new Date(Date.now() - 4 * 60_000).toISOString(),
           totalDurationSec: 74,
@@ -243,6 +250,7 @@ function seedDocumentAnalytics(): DocumentAnalytics[] {
           recipientId: "rec_4",
           email: "dave@umbrella.com",
           name: "Dave Brown",
+          username: "dave",
           emailOpened: false,
           firstAccessAt: null,
           totalDurationSec: 0,
@@ -267,6 +275,7 @@ function seedDocumentAnalytics(): DocumentAnalytics[] {
           recipientId: "rec_5",
           email: "erin@stark.com",
           name: "Erin Davis",
+          username: "erin",
           emailOpened: false,
           firstAccessAt: null,
           totalDurationSec: 0,

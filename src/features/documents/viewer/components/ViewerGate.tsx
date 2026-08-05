@@ -1,11 +1,14 @@
 /**
  * ViewerGate - access control state machine for the public viewer.
  *
- * States: verifying → email_required → otp_required → granted → denied
+ * States: verifying → login_required → email_required → otp_required → granted → denied
+ *
+ * A signed-in viewer must be the link recipient or document uploader.
+ * Unauthenticated users are redirected to the login page.
  */
 
 import { useCallback, useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import {
   verifyToken,
   submitEmail,
@@ -13,6 +16,8 @@ import {
   grantSession,
 } from "../../api/viewerApi";
 import { useViewerSessionStore } from "../store/viewerSessionStore";
+import { useAppSelector } from "../../../../store/hooks";
+import { selectIsAuthenticated, selectUser } from "../../../../store/selectors";
 import type { ViewerGateState } from "../../types";
 import type { Document } from "../../types";
 
@@ -23,8 +28,12 @@ interface ViewerGateProps {
 
 export default function ViewerGate({ children }: ViewerGateProps) {
   const { token } = useParams<{ token: string }>();
+  const navigate = useNavigate();
   const setSession = useViewerSessionStore((s) => s.setSession);
-
+  const isAuthenticated = useAppSelector(selectIsAuthenticated);
+  const user = useAppSelector(selectUser);
+  const viewerRecipientId = user ? `rec_${user.id}` : null;
+  console.log(viewerRecipientId, "viewver");
   const [state, setState] = useState<ViewerGateState>("verifying");
   const [document, setDocument] = useState<Document | null>(null);
   const [email, setEmail] = useState("");
@@ -40,18 +49,30 @@ export default function ViewerGate({ children }: ViewerGateProps) {
       return;
     }
 
+    // If the user is not authenticated, require login before proceeding.
+    if (!isAuthenticated || !viewerRecipientId) {
+      setState("login_required");
+      return;
+    }
+
     setState("verifying");
-    verifyToken(token)
-      .then((result) => {
+    verifyToken(token, viewerRecipientId)
+      .then(async (result) => {
         if (cancelled) return;
         if (!result.valid || !result.document) {
           setState("denied");
           return;
         }
         setDocument(result.document);
-        // For the POC, the mock always knows the email, so go straight to OTP.
-        // In a real system, if !result.emailKnown we'd go to "email_required".
-        setState(result.emailKnown ? "otp_required" : "email_required");
+        // For the POC, auto-grant access without OTP so tracking works
+        // immediately for testing. In production, this would require OTP.
+        try {
+          const session = await grantSession(token, viewerRecipientId);
+          setSession(session);
+          setState("granted");
+        } catch {
+          if (!cancelled) setState("denied");
+        }
       })
       .catch(() => {
         if (!cancelled) setState("denied");
@@ -60,7 +81,7 @@ export default function ViewerGate({ children }: ViewerGateProps) {
     return () => {
       cancelled = true;
     };
-  }, [token]);
+  }, [token, isAuthenticated, setSession, viewerRecipientId]);
 
   const handleEmailSubmit = useCallback(
     async (e: React.FormEvent) => {
@@ -96,7 +117,11 @@ export default function ViewerGate({ children }: ViewerGateProps) {
           setError(result.message);
           return;
         }
-        const session = await grantSession(token);
+        if (!viewerRecipientId) {
+          setState("login_required");
+          return;
+        }
+        const session = await grantSession(token, viewerRecipientId);
         setSession(session);
         setState("granted");
       } catch {
@@ -105,8 +130,16 @@ export default function ViewerGate({ children }: ViewerGateProps) {
         setLoading(false);
       }
     },
-    [token, otp, setSession],
+    [token, otp, setSession, viewerRecipientId],
   );
+
+  const handleLoginRedirect = useCallback(() => {
+    // Redirect to sign-in, preserving the viewer URL so the user
+    // returns here after authenticating.
+    navigate("/signin", {
+      state: { from: window.location.pathname },
+    });
+  }, [navigate]);
 
   // ---- Render per state ----
 
@@ -123,13 +156,61 @@ export default function ViewerGate({ children }: ViewerGateProps) {
     );
   }
 
+  if (state === "login_required") {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gray-50 dark:bg-gray-900">
+        <div className="max-w-md rounded-2xl border border-gray-200 bg-white p-8 text-center shadow-sm dark:border-gray-700 dark:bg-gray-800">
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-brand-100 text-brand-600 dark:bg-brand-500/20 dark:text-brand-300">
+            <svg
+              className="h-7 w-7"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M12 15.5V17m0 0a5 5 0 015-5v.5a5 5 0 01-5 5v.5zm0 0V11a5 5 0 00-5-5v.5a5 5 0 005 5v.5zm0 0h.007v.008H12v-.008z"
+              />
+            </svg>
+          </div>
+          <h2 className="mb-2 text-xl font-semibold text-gray-800 dark:text-white">
+            Authentication Required
+          </h2>
+          <p className="mb-6 text-sm text-gray-500 dark:text-gray-400">
+            You need to be logged in to view this document. Please sign in with
+            your username and password to access the shared link.
+          </p>
+          <button
+            type="button"
+            onClick={handleLoginRedirect}
+            className="w-full rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-600"
+          >
+            Go to Login
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (state === "denied") {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gray-50 dark:bg-gray-900">
         <div className="max-w-md rounded-2xl border border-gray-200 bg-white p-8 text-center shadow-sm dark:border-gray-700 dark:bg-gray-800">
           <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-red-100 text-red-600 dark:bg-red-500/10 dark:text-red-400">
-            <svg className="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+            <svg
+              className="h-7 w-7"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"
+              />
             </svg>
           </div>
           <h2 className="mb-2 text-xl font-semibold text-gray-800 dark:text-white">

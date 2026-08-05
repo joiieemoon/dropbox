@@ -4,7 +4,7 @@
  */
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useDispatch } from "react-redux";
 import { signup, storeToken } from "../services";
 import { SignupPayload, UserProfile } from "../types";
@@ -27,6 +27,7 @@ interface UseSignupOptions {
  */
 export function useSignup(options?: UseSignupOptions) {
   const navigate = useNavigate();
+  const location = useLocation();
   const dispatch = useDispatch();
   const queryClient = useQueryClient();
 
@@ -64,8 +65,12 @@ export function useSignup(options?: UseSignupOptions) {
       // Call custom success handler
       options?.onSuccess?.(data);
 
-      // Redirect on success
-      if (options?.onSuccessRedirect) {
+      // Redirect on success — prefer the "from" state (e.g. from ViewerGate)
+      // so the user returns to the page they were trying to access.
+      const from = (location.state as { from?: string })?.from;
+      if (from) {
+        navigate(from);
+      } else if (options?.onSuccessRedirect) {
         navigate(options.onSuccessRedirect);
       }
     },

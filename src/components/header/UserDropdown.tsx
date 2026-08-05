@@ -30,8 +30,8 @@ export default function UserDropdown() {
     logout();
   }
 
-  // Show guest user when not authenticated
-  const displayName = user?.firstName || user?.username || "Guest";
+  // Show username (matches the auth system's login identifier)
+  const displayName = user?.username || "Guest";
   const displayEmail = user?.email || "guest@example.com";
   const displayImage = user?.image || "/images/user/owner.png";
 

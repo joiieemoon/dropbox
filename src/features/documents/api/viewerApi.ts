@@ -1,8 +1,9 @@
 /**
  * Viewer API - handles the public, unauthenticated viewer flow.
- * Mocked for the POC; swap with real endpoints later.
+ * Uses the real Express backend at http://localhost:4000.
  */
 
+import { backendClient } from "./backendClient";
 import { mockStore, mockApi } from "./mockData";
 import type { Document, ViewerSession } from "../types";
 
@@ -21,24 +22,45 @@ export interface VerifyTokenResult {
  * Verify a tracking token. Returns whether the token is valid and
  * whether we already know the recipient's email (so we can skip
  * the email step and go straight to OTP).
+ *
+ * The authenticated user must be the recipient assigned to this link,
+ * or the document uploader. The token alone is not permission to view.
  */
-export async function verifyToken(token: string): Promise<VerifyTokenResult> {
-  await delay();
-  const link = mockStore.links.find((l) => l.token === token);
-  if (!link) {
-    return { valid: false, emailKnown: false };
+export async function verifyToken(
+  token: string,
+  viewerRecipientId: string,
+): Promise<VerifyTokenResult> {
+  try {
+    return await backendClient.get<VerifyTokenResult>(
+      `/api/links/${token}?viewerRecipientId=${viewerRecipientId}`,
+    );
+  } catch {
+    // 404 => invalid token; fall back to mock logic if backend is unreachable.
+    await delay();
+    const link = mockStore.links.find((l) => l.token === token);
+    if (!link) {
+      return { valid: false, emailKnown: false };
+    }
+    const document = mockStore.documents.find((d) => d.id === link.documentId);
+    if (!document) {
+      return { valid: false, emailKnown: false };
+    }
+    // A viewer is authorized if they are the link's intended recipient,
+    // are in the document's explicit sharedWith list (valid sharing record),
+    // or are the document uploader.
+    const isAuthorizedViewer =
+      viewerRecipientId === link.recipientId ||
+      document.sharedWith.includes(viewerRecipientId) ||
+      viewerRecipientId === document.uploadedBy;
+    if (!isAuthorizedViewer) {
+      return { valid: false, emailKnown: false };
+    }
+    return {
+      valid: true,
+      emailKnown: true,
+      document,
+    };
   }
-  const document = mockStore.documents.find((d) => d.id === link.documentId);
-  const recipient = mockStore.recipients.find((r) => r.id === link.recipientId);
-  if (!document || !recipient) {
-    return { valid: false, emailKnown: false };
-  }
-  return {
-    valid: true,
-    emailKnown: true,
-    document,
-    recipientEmail: recipient.email,
-  };
 }
 
 /**
@@ -46,7 +68,7 @@ export async function verifyToken(token: string): Promise<VerifyTokenResult> {
  * In a real system this would send an OTP email.
  */
 export async function submitEmail(
-  token: string,
+  _token: string,
   email: string,
 ): Promise<{ success: boolean; message: string }> {
   await delay();
@@ -60,7 +82,7 @@ export async function submitEmail(
  * Verify the OTP code. For the POC, any 6-digit code works.
  */
 export async function verifyOtp(
-  token: string,
+  _token: string,
   otp: string,
 ): Promise<{ success: boolean; message: string }> {
   await delay();
@@ -72,26 +94,26 @@ export async function verifyOtp(
 
 /**
  * Grant a viewer session. Returns the scoped session used for telemetry.
+ * Verifies access via the backend first, then issues a local scoped token.
  */
-export async function grantSession(token: string): Promise<ViewerSession> {
-  await delay();
-  const link = mockStore.links.find((l) => l.token === token);
-  if (!link) {
-    throw new Error("Invalid token");
+export async function grantSession(
+  token: string,
+  viewerRecipientId: string,
+): Promise<ViewerSession> {
+  // Verify access against the backend first.
+  const result = await verifyToken(token, viewerRecipientId);
+  if (!result.valid || !result.document) {
+    throw new Error("Permission denied");
   }
-  const document = mockStore.documents.find((d) => d.id === link.documentId);
-  if (!document) {
-    throw new Error("Document not found");
-  }
-  const recipient = mockStore.recipients.find((r) => r.id === link.recipientId);
 
+  const document = result.document;
   const scopedToken = mockApi.makeToken("scoped");
   return {
     documentId: document.id,
     documentTitle: document.name,
     pageCount: document.pageCount,
     scopedToken,
-    recipientId: recipient?.id ?? "unknown",
+    recipientId: viewerRecipientId,
     grantedAt: new Date().toISOString(),
   };
 }

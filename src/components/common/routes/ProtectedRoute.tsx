@@ -23,7 +23,7 @@ export function ProtectedRoute({
 }: ProtectedRouteProps) {
   const isAuthenticated = useAppSelector(selectIsAuthenticated);
   const location = useLocation();
-
+  console.log(isAuthenticated, "auth");
   if (!isAuthenticated) {
     return <Navigate to={redirectTo} state={{ from: location }} replace />;
   }

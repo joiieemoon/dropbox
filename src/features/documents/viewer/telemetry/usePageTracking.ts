@@ -1,29 +1,28 @@
 /**
- * usePageTracking - tracks how long a recipient spends on each page
- * using IntersectionObserver. A page counts as "viewed" when at least
- * 50% of it is visible in the viewport.
+ * usePageTracking - tracks the current page and time spent on it.
+ * Works with the strict per-page viewer: only one page is visible at a time.
  *
- * Also tracks the maximum page reached to calculate completion percentage.
+ * Tracks:
+ *  - The current page number being viewed.
+ *  - Time spent on the current page (accumulated into the BeaconQueue).
+ *  - The maximum page reached (for completion percentage).
  */
 
 import { useEffect, useRef } from "react";
 import type { BeaconQueue } from "./BeaconQueue";
 
-/** Minimum ratio of the page element that must be visible. */
-const VISIBLE_THRESHOLD = 0.5;
-
-/** How often (ms) to sample dwell time while a page is visible. */
+/** How often (ms) to sample dwell time while a page is being viewed. */
 const SAMPLE_INTERVAL_MS = 1_000;
 
 /**
- * Attach IntersectionObserver tracking to page elements.
+ * Track time spent on the current page.
  *
- * @param pageRefs - refs to the page elements (index 0 = page 1)
+ * @param currentPage - the 1-based page number currently being viewed
  * @param queue - the BeaconQueue to record dwell times into
  * @param enabled - whether tracking is active (e.g. access granted)
  */
 export function usePageTracking(
-  pageRefs: React.RefObject<(HTMLDivElement | null)[]>,
+  currentPage: number,
   queue: BeaconQueue | null,
   enabled: boolean,
 ): void {
@@ -33,73 +32,22 @@ export function usePageTracking(
   const enabledRef = useRef(enabled);
   enabledRef.current = enabled;
 
+  const currentPageRef = useRef(currentPage);
+  currentPageRef.current = currentPage;
+
   useEffect(() => {
     if (!enabled || !queue) return;
 
-    const elements = pageRefs.current;
-    if (!elements || elements.length === 0) return;
-
-    /** Map of page number -> currently visible? */
-    const visiblePages = new Map<number, boolean>();
-
-    /** Interval that samples dwell time for visible pages. */
-    let sampleInterval: number | null = null;
-
-    const startSampling = () => {
-      if (sampleInterval !== null) return;
-      sampleInterval = window.setInterval(() => {
-        if (!enabledRef.current) return;
-        visiblePages.forEach((isVisible, page) => {
-          if (isVisible) {
-            queueRef.current?.recordPageDwell(
-              page,
-              SAMPLE_INTERVAL_MS / 1000,
-            );
-          }
-        });
-      }, SAMPLE_INTERVAL_MS);
-    };
-
-    const stopSampling = () => {
-      if (sampleInterval !== null) {
-        window.clearInterval(sampleInterval);
-        sampleInterval = null;
-      }
-    };
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          const element = entry.target as HTMLElement;
-          const page = Number(element.dataset.page);
-          if (!page) return;
-
-          const isVisible =
-            entry.isIntersecting && entry.intersectionRatio >= VISIBLE_THRESHOLD;
-          visiblePages.set(page, isVisible);
-        });
-
-        // Start/stop the sampling interval based on whether any page is visible.
-        const anyVisible = Array.from(visiblePages.values()).some(Boolean);
-        if (anyVisible) {
-          startSampling();
-        } else {
-          stopSampling();
-        }
-      },
-      { threshold: [VISIBLE_THRESHOLD] },
-    );
-
-    elements.forEach((el, index) => {
-      if (!el) return;
-      el.dataset.page = String(index + 1);
-      observer.observe(el);
-    });
+    // Sample dwell time every second while the page is being viewed.
+    const interval = window.setInterval(() => {
+      if (!enabledRef.current) return;
+      const page = currentPageRef.current;
+      if (page < 1) return;
+      queueRef.current?.recordPageDwell(page, SAMPLE_INTERVAL_MS / 1000);
+    }, SAMPLE_INTERVAL_MS);
 
     return () => {
-      stopSampling();
-      observer.disconnect();
-      visiblePages.clear();
+      window.clearInterval(interval);
     };
-  }, [pageRefs, queue, enabled]);
+  }, [queue, enabled]);
 }

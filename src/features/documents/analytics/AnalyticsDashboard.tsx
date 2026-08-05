@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { listDocumentAnalytics } from "../api/analyticsApi";
 import type { DocumentAnalytics } from "../types";
 import PageDwellChart from "./components/PageDwellChart";
@@ -12,6 +13,8 @@ function formatDuration(sec: number): string {
 }
 
 export default function AnalyticsDashboard() {
+  const [searchParams] = useSearchParams();
+  const requestedDoc = searchParams.get("doc");
   const [analytics, setAnalytics] = useState<DocumentAnalytics[]>([]);
   const [selectedDocId, setSelectedDocId] = useState<string>("");
   const [loading, setLoading] = useState(true);
@@ -22,7 +25,10 @@ export default function AnalyticsDashboard() {
       .then((data) => {
         if (cancelled) return;
         setAnalytics(data);
-        if (data.length > 0) setSelectedDocId(data[0].documentId);
+        // Pre-select the document from the URL query param if present.
+        const initialDoc =
+          data.find((a) => a.documentId === requestedDoc) ?? data[0];
+        if (initialDoc) setSelectedDocId(initialDoc.documentId);
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -30,9 +36,10 @@ export default function AnalyticsDashboard() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [requestedDoc]);
 
-  const selected = analytics.find((a) => a.documentId === selectedDocId) ?? null;
+  const selected =
+    analytics.find((a) => a.documentId === selectedDocId) ?? null;
 
   if (loading) {
     return (
@@ -69,11 +76,19 @@ export default function AnalyticsDashboard() {
       {selected ? (
         <>
           {/* Document-level metric cards */}
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <MetricCard label="Recipients" value={String(selected.totalRecipients)} />
-            <MetricCard label="Email Open Rate" value={`${selected.openRate}%`} />
-            <MetricCard label="Avg Duration" value={formatDuration(selected.avgDurationSec)} />
-            <MetricCard label="Avg Viewed" value={`${selected.avgCompletionPercent}%`} />
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <MetricCard
+              label="Recipients"
+              value={String(selected.totalRecipients)}
+            />
+            <MetricCard
+              label="Avg Duration"
+              value={formatDuration(selected.avgDurationSec)}
+            />
+            <MetricCard
+              label="Avg Viewed"
+              value={`${selected.avgCompletionPercent}%`}
+            />
           </div>
 
           {/* Page dwell chart */}

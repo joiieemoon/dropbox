@@ -13,6 +13,10 @@ export interface Document {
   pageCount: number;
   uploadedAt: string;
   sizeBytes: number;
+  /** Recipients this document has been shared with. */
+  sharedWith: string[];
+  /** The recipient ID of the user who uploaded this document. */
+  uploadedBy?: string;
 }
 
 /** A recipient who can be granted access to a document. */
@@ -20,6 +24,8 @@ export interface Recipient {
   id: string;
   email: string;
   name: string;
+  /** Username used for login (shown instead of first/last name). */
+  username: string;
 }
 
 /** A unique tracking link generated for a specific recipient + document. */
@@ -36,6 +42,7 @@ export interface TrackingLink {
 /** Viewer access state machine states. */
 export type ViewerGateState =
   | "verifying"
+  | "login_required"
   | "email_required"
   | "otp_required"
   | "granted"
@@ -106,6 +113,8 @@ export interface RecipientAnalytics {
   recipientId: string;
   email: string;
   name: string;
+  /** Username used for login (shown instead of first/last name). */
+  username: string;
   /** Whether the recipient's email was opened (email open tracking). */
   emailOpened: boolean;
   /** Timestamp of first document access, if any. */

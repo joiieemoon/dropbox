@@ -21,7 +21,12 @@ export default defineConfig({
     }
   })],
   server: {
-    host: true
+    host: true,
+    watch: {
+      // Ignore the backend server directory so writes to server/data.json
+      // (view tracking, beacons) don't trigger a full page reload.
+      ignored: ["**/server/**"],
+    },
   },
   test: {
     projects: [{

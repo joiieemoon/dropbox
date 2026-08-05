@@ -1,4 +1,3 @@
-
 import Input from "../input-fields";
 export interface InputControllerProps
     extends React.ComponentProps<typeof Input> {
@@ -13,15 +12,9 @@ export interface InputProps {
 
     value?: string | number | string[];
 
-    onChange?: (
-        event:
-            | React.ChangeEvent<
-                  HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
-              >
-            | string[]
-            | boolean
-            | string
-    ) => void;
+    onChange?: React.ChangeEventHandler<
+        HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
+    >;
 
     onBlur?: React.FocusEventHandler<
         HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
