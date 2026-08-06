@@ -20,7 +20,7 @@ interface GuestRouteProps {
  */
 export function GuestRoute({
   children,
-  redirectTo = "/dashboard",
+  redirectTo = "/documents",
 }: GuestRouteProps) {
   const isAuthenticated = useAppSelector(selectIsAuthenticated);
 

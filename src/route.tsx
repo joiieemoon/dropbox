@@ -9,9 +9,6 @@ const AppLayout = lazy(() => import("./components/layout/AppLayout"));
 // Auth
 const AuthLayout = lazy(() => import("./features/auth"));
 
-// Dashboard
-const Home = lazy(() => import("./features/Dashboard/Home"));
-
 // Auth Pages
 const SignIn = lazy(() => import("./features/auth/components/signin-form"));
 const SignUp = lazy(() => import("./features/auth/components/signup-form"));
@@ -21,15 +18,21 @@ const NotFound = lazy(() => import("./features/OtherPage"));
 const UserProfiles = lazy(() => import("./features/UserProfile/layout"));
 
 // Forms
-const FormElements = lazy(() => import("./features/Forms/FormElements"));
+// const FormElements = lazy(() => import("./features/Forms/FormElements"));
 
 // Tables
 const BasicTables = lazy(() => import("./features/Tables/BasicTables"));
 
 // Document Tracking & Analytics POC
-const SenderDashboard = lazy(() => import("./features/documents/sender/SenderDashboard"));
-const AnalyticsDashboard = lazy(() => import("./features/documents/analytics/AnalyticsDashboard"));
-const SecureViewer = lazy(() => import("./features/documents/viewer/components/SecureViewer"));
+const SenderDashboard = lazy(
+  () => import("./features/documents/sender/SenderDashboard"),
+);
+const AnalyticsDashboard = lazy(
+  () => import("./features/documents/analytics/AnalyticsDashboard"),
+);
+const SecureViewer = lazy(
+  () => import("./features/documents/viewer/components/SecureViewer"),
+);
 
 export const router = createBrowserRouter([
   {
@@ -53,22 +56,24 @@ export const router = createBrowserRouter([
       </ProtectedRoute>
     ),
     children: [
-      { index: true, element: <Navigate to="/dashboard" replace /> },
-      { path: "dashboard", element: <Home /> },
+      { index: true, element: <Navigate to="/documents" replace /> },
+      { path: "dashboard", element: <Navigate to="/documents" replace /> },
+      { path: "documents", element: <SenderDashboard /> },
 
       // Profile
       { path: "profile", element: <UserProfiles /> },
 
       // Forms
-      { path: "form-elements", element: <FormElements /> },
+      // { path: "form-elements", element: <FormElements /> },
 
       // Tables
       { path: "mui-elements", element: <MuiElements /> },
       { path: "basic-tables", element: <BasicTables /> },
 
-      // Document Tracking & Analytics POC
-      { path: "documents", element: <SenderDashboard /> },
       { path: "analytics", element: <AnalyticsDashboard /> },
+      
+      // Direct document viewer for logged-in users with access
+      { path: "documents/:id", element: <SecureViewer /> },
     ],
   },
   {

@@ -24,7 +24,7 @@ const initialValues: SignInFormValues = {
 
 export default function SignInForm() {
   const { mutate: login, isPending } = useLogin({
-    onSuccessRedirect: "/dashboard",
+    onSuccessRedirect: "/documents",
     onSuccess: () => {
       toastSuccess("Signed in successfully!");
     },

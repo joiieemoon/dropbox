@@ -36,6 +36,8 @@
     "apexcharts": "^4.1.0",
     "axios": "^1.18.1",
     "clsx": "^2.1.1",
+    "firebase": "^12.17.1",
+    "firebase-admin": "^14.2.0",
     "flatpickr": "^4.6.13",
     "formik": "^2.4.9",
     "pdfjs-dist": "^6.2.108",

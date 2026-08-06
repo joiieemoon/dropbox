@@ -23,7 +23,33 @@ dist-ssr
 *.sln
 *.sw?
 .env
+.env.development
 .env.production
+
+# Secure / Sensitive files (credentials, keys, security rules, configs)
+serviceAccountKey.json
+*firebase-adminsdk*.json
+*firebase-adminsdk*/
+
+# Firebase config & security rules
+firebase.json
+firestore.rules
+storage.rules
+
+# Environment & client config
+src/firebase.ts
+src/config/*.config.ts
+
+# Scripts / seed files that may contain credentials
+seed-users.js
+src/scripts/seedUsers.ts
+
+# Server data & state
+server/data.json
+
+# Deploy scripts (may contain secrets)
+deploy-rules.bat
+deploy-rules.sh
 
 *storybook.log
 storybook-static

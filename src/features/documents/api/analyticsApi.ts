@@ -1,155 +1,124 @@
 /**
- * Analytics API - sender-facing analytics queries.
- * Uses the real Express backend at http://localhost:4000.
+ * Analytics API - reads view events from Firestore.
+ * Aggregates documents/{documentId}/views into DocumentAnalytics.
  */
 
-import { backendClient } from "./backendClient";
-import { mockStore } from "./mockData";
-import { getRecipientByIdSync } from "./recipientsApi";
-import type {
-  BeaconPayload,
-  Document,
-  DocumentAnalytics,
-  RecipientAnalytics,
-} from "../types";
+import { collection, getDocs, query, where, doc, getDoc } from "firebase/firestore";
+import { db, auth } from "../../../firebase";
+import type { DocumentAnalytics, RecipientAnalytics } from "../types";
 
-/** Simulated network latency. */
-const delay = (ms = 400) => new Promise((r) => setTimeout(r, ms));
+/** List all documents with their analytics from Firestore. */
+export async function listDocumentAnalytics(): Promise<DocumentAnalytics[]> {
+  const uid = auth.currentUser?.uid;
+  if (!uid) return [];
 
-/** Build an empty analytics entry for a document that has no data yet. */
-function emptyAnalyticsForDoc(
-  documentId: string,
-  documentTitle: string,
-  pageCount: number,
-): DocumentAnalytics {
-  // Build recipient analytics from the document's sharedWith list,
-  // using the DummyJSON recipients for real user data.
-  const doc = mockStore.documents.find((d) => d.id === documentId);
-  const recipients: RecipientAnalytics[] = (doc?.sharedWith ?? [])
-    .map((recipientId) => {
-      const r = getRecipientByIdSync(recipientId);
-      if (!r) return null;
-      return {
-        recipientId: r.id,
-        email: r.email,
-        name: r.name,
-        username: r.username,
-        emailOpened: false,
-        firstAccessAt: null,
-        totalDurationSec: 0,
-        completionPercent: 0,
-        maxPageReached: 0,
-        events: [],
-      } as RecipientAnalytics;
-    })
-    .filter((r): r is RecipientAnalytics => r !== null);
+  // Fetch all documents owned by the current user.
+  const docsQuery = query(collection(db, "documents"), where("ownerId", "==", uid));
+  const docsSnap = await getDocs(docsQuery);
+  const results: DocumentAnalytics[] = [];
 
-  return {
-    documentId,
-    documentTitle,
-    pageCount,
-    totalRecipients: recipients.length,
-    openedCount: 0,
-    openRate: 0,
-    avgDurationSec: 0,
-    avgCompletionPercent: 0,
-    avgPageDwell: Array.from({ length: pageCount }, () => 0),
-    recipients,
-  };
-}
+  for (const docSnap of docsSnap.docs) {
+    const data = docSnap.data();
+    const documentId = docSnap.id;
+    const pageCount = data.pageCount ?? 0;
+    const sharedWith = data.sharedWith ?? [];
 
-/**
- * Merge real beacon telemetry into the seeded analytics so the
- * dashboard reflects actual tracked viewing sessions.
- */
-function mergeBeaconData(seed: DocumentAnalytics[]): DocumentAnalytics[] {
-  const beacons = mockStore.beacons as unknown as BeaconPayload[];
+    // Fetch view events for this document.
+    const viewsQuery = collection(db, "documents", documentId, "views");
+    const viewsSnap = await getDocs(viewsQuery);
 
-  return seed.map((doc) => {
-    const docBeacons = beacons.filter((b) => b.documentId === doc.documentId);
-    if (docBeacons.length === 0) return doc;
-
-    // Aggregate dwell times across beacons per page.
+    // Aggregate view data.
     const dwellMap = new Map<number, number>();
     let totalDuration = 0;
     let totalCompletion = 0;
+    const viewerMap = new Map<string, { seconds: number; completion: number; maxPage: number; firstAccess: string }>();
 
-    docBeacons.forEach((b) => {
-      b.pageDwells.forEach((p) => {
-        dwellMap.set(p.page, (dwellMap.get(p.page) ?? 0) + p.seconds);
-      });
-      totalDuration += b.totalDurationSec;
-      totalCompletion += b.completionPercent;
-    });
+    viewsSnap.docs.forEach((v) => {
+      const vd = v.data();
+      const page = vd.page ?? 0;
+      const seconds = vd.seconds ?? 0;
+      const viewerId = vd.viewerId ?? "";
+      const completion = vd.completionPercent ?? 0;
 
-    // Build per-page average across beacons.
-    const avgPageDwell = Array.from({ length: doc.pageCount }, (_, i) => {
-      const page = i + 1;
-      const total = dwellMap.get(page) ?? 0;
-      return Math.round(total / docBeacons.length);
-    });
+      dwellMap.set(page, (dwellMap.get(page) ?? 0) + seconds);
+      totalDuration += seconds;
+      totalCompletion += completion;
 
-    return {
-      ...doc,
-      avgDurationSec: Math.round(totalDuration / docBeacons.length),
-      avgCompletionPercent: Math.round(totalCompletion / docBeacons.length),
-      avgPageDwell,
-      recipients: doc.recipients.map((r) => {
-        const rb = docBeacons.find((b) => b.recipientId === r.recipientId);
-        if (!rb) return r;
-        return {
-          ...r,
-          firstAccessAt: rb.sentAt,
-          totalDurationSec: rb.totalDurationSec,
-          completionPercent: rb.completionPercent,
-          maxPageReached: rb.maxPageReached,
-        };
-      }),
-    };
-  });
-}
-
-/**
- * List all documents with their analytics.
- * Fetches from the backend; falls back to mock data if unavailable.
- */
-export async function listDocumentAnalytics(): Promise<DocumentAnalytics[]> {
-  try {
-    // Fetch all documents from the backend, then fetch analytics for each.
-    const docsList = await backendClient.get<Document[]>("/api/documents");
-    const results: DocumentAnalytics[] = [];
-    for (const doc of docsList) {
-      const analytics = await backendClient.get<DocumentAnalytics>(
-        `/api/analytics/${doc.id}`,
-      );
-      if (analytics) results.push(analytics);
-    }
-    return results;
-  } catch {
-    // Fall back to mock store if backend is unreachable.
-    const seeded = mergeBeaconData(mockStore.analytics);
-    mockStore.documents.forEach((doc) => {
-      const exists = seeded.some((a) => a.documentId === doc.id);
-      if (!exists) {
-        seeded.unshift(emptyAnalyticsForDoc(doc.id, doc.name, doc.pageCount));
+      if (viewerId) {
+        const existing = viewerMap.get(viewerId) ?? { seconds: 0, completion: 0, maxPage: 0, firstAccess: "" };
+        existing.seconds += seconds;
+        existing.completion = Math.max(existing.completion, completion);
+        existing.maxPage = Math.max(existing.maxPage, page);
+        if (!existing.firstAccess) {
+          existing.firstAccess = vd.viewedAt?.toDate?.()?.toISOString() ?? "";
+        }
+        viewerMap.set(viewerId, existing);
       }
     });
-    return seeded;
+
+    const avgPageDwell = Array.from({ length: pageCount }, (_, i) => {
+      const page = i + 1;
+      return Math.round((dwellMap.get(page) ?? 0) / Math.max(viewsSnap.size, 1));
+    });
+
+    // Fetch recipient details from Firestore users collection.
+    const recipientPromises = sharedWith.map(async (recipientId: string) => {
+      const v = viewerMap.get(recipientId);
+      try {
+        const userRef = doc(db, "users", recipientId);
+        const userSnap = await getDoc(userRef);
+        const userData = userSnap.data();
+        return {
+          recipientId,
+          email: userData?.email ?? "",
+          name: userData?.displayName ?? userData?.username ?? "",
+          username: userData?.username ?? "",
+          emailOpened: false,
+          firstAccessAt: v?.firstAccess ?? null,
+          totalDurationSec: v?.seconds ?? 0,
+          completionPercent: v?.completion ?? 0,
+          maxPageReached: v?.maxPage ?? 0,
+          events: [],
+        } as RecipientAnalytics;
+      } catch {
+        return {
+          recipientId,
+          email: "",
+          name: "",
+          username: "",
+          emailOpened: false,
+          firstAccessAt: v?.firstAccess ?? null,
+          totalDurationSec: v?.seconds ?? 0,
+          completionPercent: v?.completion ?? 0,
+          maxPageReached: v?.maxPage ?? 0,
+          events: [],
+        } as RecipientAnalytics;
+      }
+    });
+
+    const recipients = await Promise.all(recipientPromises);
+
+    results.push({
+      documentId,
+      documentTitle: data.name ?? "",
+      pageCount,
+      totalRecipients: sharedWith.length,
+      openedCount: viewerMap.size,
+      openRate: sharedWith.length > 0 ? Math.round((viewerMap.size / sharedWith.length) * 100) : 0,
+      avgDurationSec: Math.round(totalDuration / Math.max(viewsSnap.size, 1)),
+      avgCompletionPercent: Math.round(totalCompletion / Math.max(viewsSnap.size, 1)),
+      avgPageDwell,
+      recipients,
+    });
   }
+
+  return results;
 }
 
-/**
- * Get analytics for a single document.
- * Fetches from the backend; falls back to mock data if unavailable.
- */
+/** Get analytics for a single document. */
 export async function getDocumentAnalytics(
   documentId: string,
 ): Promise<DocumentAnalytics | null> {
-  try {
-    return await backendClient.get<DocumentAnalytics>(`/api/analytics/${documentId}`);
-  } catch {
-    await delay();
-    const all = await listDocumentAnalytics();
-    return all.find((a) => a.documentId === documentId) ?? null;
-  }
+  const all = await listDocumentAnalytics();
+  return all.find((a) => a.documentId === documentId) ?? null;
 }

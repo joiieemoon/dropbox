@@ -181,15 +181,7 @@ export const personalFields: ProfileField[] = [
         required: true,
         colSpan: 6,
     },
-    {
-        name: "phone",
-        label: "Phone",
-        type: "text",
-        placeholder: "Enter phone number",
-        autoComplete: "tel",
-        required: true,
-        colSpan: 6,
-    },
+    
     {
         name: "bio",
         label: "Bio",

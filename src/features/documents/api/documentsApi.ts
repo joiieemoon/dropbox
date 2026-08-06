@@ -3,25 +3,45 @@
  * Uses the real Express backend at http://localhost:4000.
  */
 
-import { backendClient } from "./backendClient";
-import { mockStore, mockApi } from "./mockData";
-import { fetchRecipients } from "./recipientsApi";
+import {
+  collection,
+  doc,
+  getDocs,
+  query,
+  where,
+  addDoc,
+  updateDoc,
+  setDoc,
+  getDoc,
+  deleteDoc,
+  serverTimestamp,
+} from "firebase/firestore";
+import { db, auth } from "../../../firebase";
 import type { Document, Recipient, TrackingLink } from "../types";
 
-/** Simulated network latency. */
-const delay = (ms = 400) => new Promise((r) => setTimeout(r, ms));
-
 /**
- * List all uploaded documents.
- * Fetches from the backend; falls back to mock data if unavailable.
+ * List all documents owned by the current Firebase user.
  */
 export async function listDocuments(): Promise<Document[]> {
-  try {
-    return await backendClient.get<Document[]>("/api/documents");
-  } catch {
-    await delay();
-    return [...mockStore.documents];
-  }
+  const uid = auth.currentUser?.uid;
+  if (!uid) return [];
+  const q = query(collection(db, "documents"), where("ownerId", "==", uid));
+  const snap = await getDocs(q);
+  return snap.docs.map((d) => {
+    const data = d.data();
+    return {
+      id: d.id,
+      name: data.name ?? "",
+      url: data.dataUrl ?? "",
+      dataUrl: data.dataUrl ?? "",
+      pageCount: data.pageCount ?? 0,
+      sizeBytes: data.sizeBytes ?? 0,
+      uploadedAt: data.createdAt?.toDate?.()?.toISOString() ?? "",
+      sharedWith: data.sharedWith ?? [],
+      uploadedBy: data.ownerId ?? uid,
+      ownerId: data.ownerId ?? uid,
+    } as Document;
+  });
 }
 
 /**
@@ -33,38 +53,54 @@ export async function registerDocument(
   input: Pick<Document, "name" | "url" | "pageCount" | "sizeBytes"> & {
     file?: File;
     uploadedBy?: string;
+    uploaderRecipientId?: string;
+    uploader?: Pick<Recipient, "id" | "username" | "email" | "name">;
   },
 ): Promise<Document> {
-  let dataUrl: string | undefined;
+  const uid = auth.currentUser?.uid;
+  if (!uid) throw new Error("You must be signed in to upload documents");
+
+  // Convert PDF file to base64 data URL for Firestore storage.
+  let dataUrl = "";
   if (input.file) {
     dataUrl = await readFileAsDataUrl(input.file);
   }
-  try {
-    return await backendClient.post<Document>("/api/documents", {
-      name: input.name,
-      url: input.url,
-      pageCount: input.pageCount,
-      sizeBytes: input.sizeBytes,
-      dataUrl,
-      uploadedBy: input.uploadedBy,
-    });
-  } catch {
-    // Backend unreachable — fall back to mock store for the POC.
-    await delay();
-    const doc: Document = {
-      id: mockApi.makeToken("doc"),
-      name: input.name,
-      url: input.url,
-      pageCount: input.pageCount,
-      sizeBytes: input.sizeBytes,
-      dataUrl,
-      uploadedAt: new Date().toISOString(),
-      sharedWith: [],
-      uploadedBy: input.uploadedBy,
-    };
-    mockApi.addDocument(doc);
-    return doc;
-  }
+
+  // Create the Firestore document with the PDF data.
+  const docRef = doc(collection(db, "documents"));
+  await setDoc(docRef, {
+    name: input.name,
+    ownerId: uid,
+    dataUrl,
+    pageCount: input.pageCount,
+    sizeBytes: input.sizeBytes,
+    sharedWith: [],
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+
+  // Automatically grant the owner access to the document
+  const accessRef = doc(db, "documents", docRef.id, "access", uid);
+  await setDoc(accessRef, {
+    userId: uid,
+    role: "owner",
+    grantedBy: uid,
+    grantedAt: serverTimestamp(),
+    active: true,
+  });
+
+  return {
+    id: docRef.id,
+    name: input.name,
+    url: dataUrl,
+    dataUrl,
+    pageCount: input.pageCount,
+    sizeBytes: input.sizeBytes,
+    uploadedAt: new Date().toISOString(),
+    sharedWith: [],
+    uploadedBy: uid,
+    ownerId: uid,
+  };
 }
 
 /** Read a File as a base64 data URL. */
@@ -82,11 +118,16 @@ function readFileAsDataUrl(file: File): Promise<string> {
  * Fetches from the backend; falls back to mock data if unavailable.
  */
 export async function listRecipients(): Promise<Recipient[]> {
-  try {
-    return await backendClient.get<Recipient[]>("/api/recipients");
-  } catch {
-    return fetchRecipients();
-  }
+  const snap = await getDocs(collection(db, "users"));
+  return snap.docs.map((d) => {
+    const data = d.data();
+    return {
+      id: d.id,
+      email: data.email ?? "",
+      name: data.displayName ?? data.username ?? "",
+      username: data.username ?? data.email?.split("@")[0] ?? "",
+    } as Recipient;
+  });
 }
 
 /**
@@ -97,41 +138,41 @@ export async function shareDocument(
   documentId: string,
   recipientId: string,
 ): Promise<TrackingLink> {
-  try {
-    return await backendClient.post<TrackingLink>("/api/links", {
-      documentId,
-      recipientId,
-    });
-  } catch {
-    await delay();
-    const token = mockApi.makeToken("v");
-    const link: TrackingLink = {
-      id: mockApi.makeToken("link"),
-      documentId,
-      recipientId,
-      token,
-      url: `${window.location.origin}/v/${token}`,
-      createdAt: new Date().toISOString(),
-    };
-    mockApi.addLink(link);
+  const uid = auth.currentUser?.uid;
+  if (!uid) throw new Error("You must be signed in to share documents");
 
-    // Update the document's sharedWith list.
-    const doc = mockStore.documents.find((d) => d.id === documentId);
-    if (doc && !doc.sharedWith.includes(recipientId)) {
-      doc.sharedWith.push(recipientId);
-      // Persist the updated document list.
-      try {
-        localStorage.setItem(
-          "doc_tracking_documents",
-          JSON.stringify(mockStore.documents),
-        );
-      } catch {
-        // Ignore persistence errors.
-      }
-    }
+  const linkRef = await addDoc(collection(db, "shareLinks"), {
+    documentId,
+    recipientId,
+    createdBy: uid,
+    active: true,
+    expiresAt: null,
+    createdAt: serverTimestamp(),
+  });
 
-    return link;
-  }
+  const accessRef = doc(db, "documents", documentId, "access", recipientId);
+  await setDoc(accessRef, {
+    userId: recipientId,
+    role: "viewer",
+    grantedBy: uid,
+    grantedAt: serverTimestamp(),
+    active: true,
+  });
+
+  const docRef = doc(db, "documents", documentId);
+  const docSnap = await getDoc(docRef);
+  const existing = docSnap.data()?.sharedWith ?? [];
+  await updateDoc(docRef, { sharedWith: [...existing, recipientId] });
+
+  const linkId = linkRef.id;
+  return {
+    id: linkId,
+    documentId,
+    recipientId,
+    token: linkId,
+    url: `${window.location.origin}/v/${linkId}`,
+    createdAt: new Date().toISOString(),
+  };
 }
 
 /**
@@ -149,10 +190,103 @@ export async function generateTrackingLink(
  * Fetches from the backend; falls back to mock data if unavailable.
  */
 export async function listTrackingLinks(): Promise<TrackingLink[]> {
+  const uid = auth.currentUser?.uid;
+  if (!uid) return [];
+  const q = query(collection(db, "shareLinks"), where("createdBy", "==", uid));
+  const snap = await getDocs(q);
+  return snap.docs.map((d) => {
+    const data = d.data();
+    return {
+      id: d.id,
+      documentId: data.documentId ?? "",
+      recipientId: data.recipientId ?? "",
+      token: d.id,
+      url: `${window.location.origin}/v/${d.id}`,
+      createdAt: data.createdAt?.toDate?.()?.toISOString() ?? "",
+    } as TrackingLink;
+  });
+}
+
+/**
+ * Delete a document and all its associated data (access, views, shareLinks).
+ * Only the document owner can delete it.
+ */
+export async function deleteDocument(documentId: string): Promise<void> {
+  const uid = auth.currentUser?.uid;
+  if (!uid) throw new Error("You must be signed in to delete documents");
+
+  // Verify ownership
+  const docRef = doc(db, "documents", documentId);
+  const docSnap = await getDoc(docRef);
+  if (!docSnap.exists()) throw new Error("Document not found");
+  if (docSnap.data()?.ownerId !== uid) throw new Error("You can only delete your own documents");
+
+  // Delete all shareLinks for this document
+  const linksQuery = query(collection(db, "shareLinks"), where("documentId", "==", documentId));
+  const linksSnap = await getDocs(linksQuery);
+  const linkDeletePromises = linksSnap.docs.map((d) => deleteDoc(d.ref));
+  await Promise.all(linkDeletePromises);
+
+  // Delete all access records
+  const accessQuery = collection(db, "documents", documentId, "access");
+  const accessSnap = await getDocs(accessQuery);
+  const accessDeletePromises = accessSnap.docs.map((d) => deleteDoc(d.ref));
+  await Promise.all(accessDeletePromises);
+
+  // Delete all views
+  const viewsQuery = collection(db, "documents", documentId, "views");
+  const viewsSnap = await getDocs(viewsQuery);
+  const viewDeletePromises = viewsSnap.docs.map((d) => deleteDoc(d.ref));
+  await Promise.all(viewDeletePromises);
+
+  // Delete the document itself
+  await deleteDoc(docRef);
+}
+
+/**
+ * List documents shared with the current user.
+ * Queries the access subcollection to find documents where the user has access.
+ */
+export async function listSharedDocuments(): Promise<Document[]> {
+  const uid = auth.currentUser?.uid;
+  if (!uid) return [];
+
   try {
-    return await backendClient.get<TrackingLink[]>("/api/links");
-  } catch {
-    await delay();
-    return [...mockStore.links];
+    // Query all documents and filter by access
+    const allDocsQuery = query(collection(db, "documents"));
+    const allDocsSnap = await getDocs(allDocsQuery);
+    
+    const sharedDocs: Document[] = [];
+    
+    for (const docSnap of allDocsSnap.docs) {
+      const data = docSnap.data();
+      
+      // Skip if user is the owner
+      if (data.ownerId === uid) continue;
+      
+      // Check if user has access
+      const accessRef = doc(db, "documents", docSnap.id, "access", uid);
+      const accessSnap = await getDoc(accessRef);
+      
+      if (accessSnap.exists() && accessSnap.data()?.active === true) {
+        sharedDocs.push({
+          id: docSnap.id,
+          name: data.name ?? "",
+          url: data.dataUrl ?? "",
+          dataUrl: data.dataUrl ?? "",
+          pageCount: data.pageCount ?? 0,
+          sizeBytes: data.sizeBytes ?? 0,
+          uploadedAt: data.createdAt?.toDate?.()?.toISOString() ?? "",
+          sharedWith: data.sharedWith ?? [],
+          uploadedBy: data.ownerId ?? "",
+          ownerId: data.ownerId ?? "",
+        } as Document);
+      }
+    }
+    
+    return sharedDocs;
+  } catch (error) {
+    console.error("Failed to fetch shared documents:", error);
+    return [];
   }
 }

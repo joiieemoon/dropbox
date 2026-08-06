@@ -10,13 +10,17 @@ export interface Document {
   url: string;
   /** Base64 data URL of the PDF content (stored in localStorage as JSON). */
   dataUrl?: string;
+  /** Cloud Storage path to the PDF file (e.g. documents/{ownerUid}/{docId}/{filename}). */
+  storagePath?: string;
   pageCount: number;
   uploadedAt: string;
   sizeBytes: number;
   /** Recipients this document has been shared with. */
   sharedWith: string[];
-  /** The recipient ID of the user who uploaded this document. */
+  /** The username of the user who uploaded this document (legacy rec_X also supported). */
   uploadedBy?: string;
+  /** Firebase UID of the document owner. */
+  ownerId?: string;
 }
 
 /** A recipient who can be granted access to a document. */

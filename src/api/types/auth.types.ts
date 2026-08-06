@@ -28,6 +28,8 @@ export interface LoginResponse {
   lastName: string;
   gender: string;
   image: string;
+  // Firebase UID (the secure, stable identity for this app)
+  firebaseUid?: string;
   // snake_case (for compatibility)
   access_token?: string;
   refresh_token?: string;
@@ -54,6 +56,8 @@ export interface SignupResponse {
   role: string;
   avatar: string;
   creationAt: string;
+  // Firebase UID (the secure, stable identity for this app)
+  firebaseUid?: string;
 }
 
 /**
@@ -68,6 +72,8 @@ export interface UserProfile {
   username: string;
   image: string;
   creationAt?: string;
+  // Firebase UID (the secure, stable identity for this app)
+  firebaseUid?: string;
   // Additional fields from /auth/me endpoint
   phone?: string;
   address?: {

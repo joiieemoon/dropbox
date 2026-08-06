@@ -29,6 +29,7 @@ const seedDocuments: Document[] = [
     uploadedAt: "2026-07-28T09:12:00.000Z",
     sizeBytes: 2_400_000,
     sharedWith: ["rec_1", "rec_2"],
+    uploadedBy: "emilys",
   },
   {
     id: "doc_2",
@@ -38,6 +39,7 @@ const seedDocuments: Document[] = [
     uploadedAt: "2026-07-30T14:05:00.000Z",
     sizeBytes: 3_100_000,
     sharedWith: ["rec_3"],
+    uploadedBy: "emilys",
   },
   {
     id: "doc_3",
@@ -47,16 +49,17 @@ const seedDocuments: Document[] = [
     uploadedAt: "2026-08-01T11:30:00.000Z",
     sizeBytes: 1_800_000,
     sharedWith: [],
+    uploadedBy: "emilys",
   },
 ];
 
-/** Seed recipients. */
+/** Seed recipients (mapped to DummyJSON users). */
 const seedRecipients: Recipient[] = [
-  { id: "rec_1", email: "alice@acme.com", name: "Alice Johnson", username: "alice" },
-  { id: "rec_2", email: "bob@globex.com", name: "Bob Smith", username: "bob" },
-  { id: "rec_3", email: "carol@initech.com", name: "Carol White", username: "carol" },
-  { id: "rec_4", email: "dave@umbrella.com", name: "Dave Brown", username: "dave" },
-  { id: "rec_5", email: "erin@stark.com", name: "Erin Davis", username: "erin" },
+  { id: "rec_1", email: "emily.johnson@x.dummyjson.com", name: "Emily Johnson", username: "emilys" },
+  { id: "rec_2", email: "michael.williams@x.dummyjson.com", name: "Michael Williams", username: "michaelw" },
+  { id: "rec_3", email: "sophia.brown@x.dummyjson.com", name: "Sophia Brown", username: "sophiab" },
+  { id: "rec_4", email: "james.davis@x.dummyjson.com", name: "James Davis", username: "jamesd" },
+  { id: "rec_5", email: "emma.miller@x.dummyjson.com", name: "Emma Miller", username: "emmaj" },
 ];
 
 /** Seed tracking links. */

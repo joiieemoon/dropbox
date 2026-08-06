@@ -3,10 +3,10 @@
  * Renders children only for authenticated users.
  */
 
-import { ReactNode } from "react";
+import { ReactNode, useEffect, useState } from "react";
 import { Navigate, useLocation } from "react-router-dom";
-import { useAppSelector } from "../../../store/hooks";
-import { selectIsAuthenticated } from "../../../store/selectors";
+import { onAuthStateChanged } from "firebase/auth";
+import { auth } from "../../../firebase";
 
 interface ProtectedRouteProps {
   children: ReactNode;
@@ -21,9 +21,20 @@ export function ProtectedRoute({
   children,
   redirectTo = "/signin",
 }: ProtectedRouteProps) {
-  const isAuthenticated = useAppSelector(selectIsAuthenticated);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   const location = useLocation();
-  console.log(isAuthenticated, "auth");
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setIsAuthenticated(!!user);
+    });
+    return unsubscribe;
+  }, []);
+
+  if (isAuthenticated === null) {
+    return null; // Loading state
+  }
+
   if (!isAuthenticated) {
     return <Navigate to={redirectTo} state={{ from: location }} replace />;
   }

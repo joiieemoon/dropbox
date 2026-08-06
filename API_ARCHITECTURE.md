@@ -224,7 +224,7 @@ function LoginForm() {
     isPending,
     error,
   } = useLogin({
-    onSuccessRedirect: "/dashboard",
+    onSuccessRedirect: "/documents",
     onError: (error) => console.error(error),
   });
 

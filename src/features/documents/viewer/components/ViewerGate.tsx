@@ -8,16 +8,17 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useLocation } from "react-router-dom";
+import { onAuthStateChanged } from "firebase/auth";
+import { auth } from "../../../../firebase";
 import {
   verifyToken,
+  verifyDirectAccess,
   submitEmail,
   verifyOtp,
   grantSession,
 } from "../../api/viewerApi";
 import { useViewerSessionStore } from "../store/viewerSessionStore";
-import { useAppSelector } from "../../../../store/hooks";
-import { selectIsAuthenticated, selectUser } from "../../../../store/selectors";
 import type { ViewerGateState } from "../../types";
 import type { Document } from "../../types";
 
@@ -27,13 +28,9 @@ interface ViewerGateProps {
 }
 
 export default function ViewerGate({ children }: ViewerGateProps) {
-  const { token } = useParams<{ token: string }>();
+  const { token, id } = useParams<{ token?: string; id?: string }>();
   const navigate = useNavigate();
   const setSession = useViewerSessionStore((s) => s.setSession);
-  const isAuthenticated = useAppSelector(selectIsAuthenticated);
-  const user = useAppSelector(selectUser);
-  const viewerRecipientId = user ? `rec_${user.id}` : null;
-  console.log(viewerRecipientId, "viewver");
   const [state, setState] = useState<ViewerGateState>("verifying");
   const [document, setDocument] = useState<Document | null>(null);
   const [email, setEmail] = useState("");
@@ -41,47 +38,71 @@ export default function ViewerGate({ children }: ViewerGateProps) {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  // Verify the token on mount.
+  // Verify the token or document ID on mount using Firebase Auth.
   useEffect(() => {
     let cancelled = false;
-    if (!token) {
+    const accessId = token || id;
+    console.log("[ViewerGate] Mounted with:", { token, id, accessId });
+    
+    if (!accessId) {
+      console.log("[ViewerGate] No access ID - denying");
       setState("denied");
       return;
     }
 
-    // If the user is not authenticated, require login before proceeding.
-    if (!isAuthenticated || !viewerRecipientId) {
-      setState("login_required");
-      return;
-    }
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (cancelled) return;
+      if (!user) {
+        console.log("[ViewerGate] No user - login required");
+        setState("login_required");
+        return;
+      }
 
-    setState("verifying");
-    verifyToken(token, viewerRecipientId)
-      .then(async (result) => {
-        if (cancelled) return;
-        if (!result.valid || !result.document) {
-          setState("denied");
-          return;
-        }
-        setDocument(result.document);
-        // For the POC, auto-grant access without OTP so tracking works
-        // immediately for testing. In production, this would require OTP.
-        try {
-          const session = await grantSession(token, viewerRecipientId);
-          setSession(session);
-          setState("granted");
-        } catch {
+      const identity = {
+        uid: user.uid,
+        email: user.email ?? "",
+      };
+      console.log("[ViewerGate] User authenticated:", identity);
+
+      setState("verifying");
+      
+      // If we have a token (share link), use verifyToken
+      // If we have an id (direct access), verify directly
+      const verifyPromise = token 
+        ? verifyToken(token, identity)
+        : verifyDirectAccess(id!, identity);
+
+      verifyPromise
+        .then(async (result) => {
+          console.log("[ViewerGate] Verification result:", result);
+          if (cancelled) return;
+          if (!result.valid || !result.document) {
+            console.log("[ViewerGate] Access denied - invalid result");
+            setState("denied");
+            return;
+          }
+          console.log("[ViewerGate] Access granted - document found:", result.document.name);
+          setDocument(result.document);
+          try {
+            const session = await grantSession(accessId, identity);
+            setSession(session);
+            setState("granted");
+          } catch (error) {
+            console.log("[ViewerGate] Grant session failed:", error);
+            if (!cancelled) setState("denied");
+          }
+        })
+        .catch((error) => {
+          console.log("[ViewerGate] Verification error:", error);
           if (!cancelled) setState("denied");
-        }
-      })
-      .catch(() => {
-        if (!cancelled) setState("denied");
-      });
+        });
+    });
 
     return () => {
       cancelled = true;
+      unsubscribe();
     };
-  }, [token, isAuthenticated, setSession, viewerRecipientId]);
+  }, [token, id, setSession]);
 
   const handleEmailSubmit = useCallback(
     async (e: React.FormEvent) => {
@@ -117,12 +138,15 @@ export default function ViewerGate({ children }: ViewerGateProps) {
           setError(result.message);
           return;
         }
-        if (!viewerRecipientId) {
+        const user = auth.currentUser;
+        if (!user) {
           setState("login_required");
           return;
         }
-        const session = await grantSession(token, viewerRecipientId);
+        const identity = { uid: user.uid, email: user.email ?? "" };
+        const session = await grantSession(token, identity);
         setSession(session);
+
         setState("granted");
       } catch {
         setError("Something went wrong. Please try again.");
@@ -130,18 +154,20 @@ export default function ViewerGate({ children }: ViewerGateProps) {
         setLoading(false);
       }
     },
-    [token, otp, setSession, viewerRecipientId],
+    [token, otp, setSession],
   );
 
+  const location = useLocation();
   const handleLoginRedirect = useCallback(() => {
     // Redirect to sign-in, preserving the viewer URL so the user
     // returns here after authenticating.
     navigate("/signin", {
-      state: { from: window.location.pathname },
+      state: { from: location.pathname },
     });
-  }, [navigate]);
+  }, [navigate, location.pathname]);
 
   // ---- Render per state ----
+  console.log(state, "stateee");
 
   if (state === "verifying") {
     return (

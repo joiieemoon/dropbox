@@ -75,7 +75,7 @@ export default function UserMetaCard() {
               <h4 className="mb-2 text-lg font-semibold text-center text-gray-800 dark:text-white/90 xl:text-left">
                 {displayName}
               </h4>
-              <div className="flex flex-col items-center gap-1 text-center xl:flex-row xl:gap-3 xl:text-left">
+              {/* <div className="flex flex-col items-center gap-1 text-center xl:flex-row xl:gap-3 xl:text-left">
                 <p className="text-sm text-gray-500 dark:text-gray-400">
                   {user?.address?.city || "Team Manager"}
                 </p>
@@ -83,13 +83,13 @@ export default function UserMetaCard() {
                 <p className="text-sm text-gray-500 dark:text-gray-400">
                   {user?.address?.country || "Location"}
                 </p>
-              </div>
+              </div> */}
             </div>
             <div className="flex items-center order-2 gap-2 grow xl:order-3 xl:justify-end">
               {/* Social links */}
             </div>
           </div>
-          <button
+          {/* <button
             onClick={openModal}
             className="flex w-full items-center justify-center gap-2 rounded-full border border-gray-300 bg-white px-4 py-3 text-sm font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200 lg:inline-flex lg:w-auto"
           >
@@ -109,7 +109,7 @@ export default function UserMetaCard() {
               />
             </svg>
             Edit
-          </button>
+          </button> */}
         </div>
       </div>
       <Modal

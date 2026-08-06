@@ -1,0 +1,59 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(documentId) {
+      return signedIn() &&
+        get(/databases/$(database)/documents/documents/$(documentId))
+          .data.ownerId == request.auth.uid;
+    }
+
+    function hasAccess(documentId) {
+      return signedIn() &&
+        exists(/databases/$(database)/documents/documents/$(documentId)/access/$(request.auth.uid));
+    }
+
+    // For list queries, we can only check resource.data directly.
+    // This allows listing documents where the current user is the owner.
+    function isOwnerList() {
+      return signedIn() && resource.data.ownerId == request.auth.uid;
+    }
+
+    // Users can read all profiles (needed for the share panel),
+    // but can only create/update their own.
+    match /users/{uid} {
+      allow read: if signedIn();
+      allow create, update: if signedIn() && request.auth.uid == uid;
+    }
+
+    match /documents/{documentId} {
+      allow create: if signedIn();
+      allow read: if isOwner(documentId) || hasAccess(documentId) || isOwnerList();
+      allow update: if isOwner(documentId) || isOwnerList();
+      allow delete: if isOwner(documentId);
+
+      match /access/{userId} {
+        allow read: if isOwner(documentId) || request.auth.uid == userId;
+        allow create, update, delete: if isOwner(documentId);
+      }
+
+      match /views/{viewId} {
+        allow create: if hasAccess(documentId);
+        allow read: if isOwner(documentId);
+      }
+    }
+
+    match /shareLinks/{linkId} {
+      // Allow read if user is the recipient OR the document owner
+      allow read: if signedIn() && (
+        resource.data.recipientId == request.auth.uid ||
+        get(/databases/$(database)/documents/documents/$(resource.data.documentId)).data.ownerId == request.auth.uid
+      );
+      allow create, update, delete: if signedIn() &&
+        request.resource.data.createdBy == request.auth.uid;
+    }
+  }
+}

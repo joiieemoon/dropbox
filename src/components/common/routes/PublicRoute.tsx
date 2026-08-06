@@ -3,10 +3,10 @@
  * Renders children for unauthenticated users.
  */
 
-import { ReactNode } from "react";
+import { ReactNode, useEffect, useState } from "react";
 import { Navigate, useLocation } from "react-router-dom";
-import { useAppSelector } from "../../../store/hooks";
-import { selectIsAuthenticated } from "../../../store/selectors";
+import { onAuthStateChanged } from "firebase/auth";
+import { auth } from "../../../firebase";
 
 interface PublicRouteProps {
   children: ReactNode;
@@ -38,10 +38,21 @@ function resolveRedirect(from: unknown, fallback: string): string {
  */
 export function PublicRoute({
   children,
-  redirectTo = "/dashboard",
+  redirectTo = "/documents",
 }: PublicRouteProps) {
-  const isAuthenticated = useAppSelector(selectIsAuthenticated);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   const location = useLocation();
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setIsAuthenticated(!!user);
+    });
+    return unsubscribe;
+  }, []);
+
+  if (isAuthenticated === null) {
+    return null; // Loading state
+  }
 
   if (isAuthenticated) {
     const from = (location.state as { from?: unknown })?.from;

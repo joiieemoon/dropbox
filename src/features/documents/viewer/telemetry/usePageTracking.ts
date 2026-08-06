@@ -16,6 +16,7 @@ const SAMPLE_INTERVAL_MS = 1_000;
 
 /**
  * Track time spent on the current page.
+ * Only tracks when the tab is visible and the user is active.
  *
  * @param currentPage - the 1-based page number currently being viewed
  * @param queue - the BeaconQueue to record dwell times into
@@ -38,16 +39,41 @@ export function usePageTracking(
   useEffect(() => {
     if (!enabled || !queue) return;
 
+    // Track accumulated time for debugging.
+    let totalTrackedSeconds = 0;
+
     // Sample dwell time every second while the page is being viewed.
     const interval = window.setInterval(() => {
-      if (!enabledRef.current) return;
+      // Only track if the tab is visible and focused.
+      if (document.hidden) {
+        console.log("[PageTracking] Tab hidden - pausing timer");
+        return;
+      }
+
+      if (!enabledRef.current) {
+        console.log("[PageTracking] Tracking disabled - pausing timer");
+        return;
+      }
+
       const page = currentPageRef.current;
-      if (page < 1) return;
-      queueRef.current?.recordPageDwell(page, SAMPLE_INTERVAL_MS / 1000);
+      if (page < 1) {
+        console.log("[PageTracking] Invalid page - pausing timer");
+        return;
+      }
+
+      const seconds = SAMPLE_INTERVAL_MS / 1000;
+      totalTrackedSeconds += seconds;
+      
+      console.log(`[PageTracking] Recording ${seconds}s for page ${page} (total: ${totalTrackedSeconds}s)`);
+      
+      queueRef.current?.recordPageDwell(page, seconds);
     }, SAMPLE_INTERVAL_MS);
+
+    console.log("[PageTracking] Timer started");
 
     return () => {
       window.clearInterval(interval);
+      console.log(`[PageTracking] Timer stopped. Total tracked: ${totalTrackedSeconds}s`);
     };
   }, [queue, enabled]);
 }

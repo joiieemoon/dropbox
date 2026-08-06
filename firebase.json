@@ -1,0 +1,23 @@
+{
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": {
+      "indexes": [
+        {
+          "collection": "documents",
+          "queryScope": "COLLECTION",
+          "fields": [
+            { "fieldPath": "ownerId", "order": "ASCENDING" }
+          ]
+        },
+        {
+          "collection": "shareLinks",
+          "queryScope": "COLLECTION",
+          "fields": [
+            { "fieldPath": "createdBy", "order": "ASCENDING" }
+          ]
+        }
+      ]
+    }
+  }
+}

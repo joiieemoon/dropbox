@@ -80,6 +80,19 @@ export class BeaconQueue {
       Math.round((this.maxPageReached / this.pageCount) * 100),
     );
 
+    // Calculate total duration as sum of all page dwell times (actual viewing time).
+    const totalDurationSec = Math.round(
+      pageDwells.reduce((sum, dwell) => sum + dwell.seconds, 0),
+    );
+
+    console.log(`[BeaconQueue] Flushing payload:`, {
+      sessionId: this.sessionId,
+      pageDwells,
+      totalDurationSec,
+      maxPageReached: this.maxPageReached,
+      completionPercent,
+    });
+
     const payload: BeaconPayload = {
       sessionId: this.sessionId,
       scopedToken: this.scopedToken,
@@ -89,7 +102,7 @@ export class BeaconQueue {
       maxPageReached: this.maxPageReached,
       completionPercent,
       interactions: [...this.interactions],
-      totalDurationSec: Math.round((Date.now() - this.startedAt) / 1000),
+      totalDurationSec,
       sentAt: new Date().toISOString(),
     };
 

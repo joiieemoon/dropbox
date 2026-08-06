@@ -1,14 +1,11 @@
 /**
- * Viewer API - handles the public, unauthenticated viewer flow.
- * Uses the real Express backend at http://localhost:4000.
+ * Viewer API - handles the public viewer flow using Firebase.
+ * Reads shareLinks/{linkId} and verifies access via Firestore.
  */
 
-import { backendClient } from "./backendClient";
-import { mockStore, mockApi } from "./mockData";
+import { doc, getDoc } from "firebase/firestore";
+import { db } from "../../../firebase";
 import type { Document, ViewerSession } from "../types";
-
-/** Simulated network latency. */
-const delay = (ms = 400) => new Promise((r) => setTimeout(r, ms));
 
 export interface VerifyTokenResult {
   valid: boolean;
@@ -19,101 +16,194 @@ export interface VerifyTokenResult {
 }
 
 /**
- * Verify a tracking token. Returns whether the token is valid and
- * whether we already know the recipient's email (so we can skip
- * the email step and go straight to OTP).
- *
- * The authenticated user must be the recipient assigned to this link,
- * or the document uploader. The token alone is not permission to view.
+ * Verify direct access to a document by ID.
+ * Used when a logged-in user clicks "View" on a shared document.
+ */
+export async function verifyDirectAccess(
+  documentId: string,
+  identity: { uid: string; email: string },
+): Promise<VerifyTokenResult> {
+  const uid = identity.uid;
+
+  console.log("[verifyDirectAccess] Checking access for:", { documentId, uid });
+
+  // Read documents/{documentId}
+  const docRef = doc(db, "documents", documentId);
+  const docSnap = await getDoc(docRef);
+  if (!docSnap.exists()) {
+    console.log("[verifyDirectAccess] Document not found");
+    return { valid: false, emailKnown: false };
+  }
+
+  const data = docSnap.data();
+  console.log("[verifyDirectAccess] Document found:", { name: data.name, ownerId: data.ownerId });
+
+  // Check if user has access via access subcollection
+  const accessRef = doc(db, "documents", documentId, "access", uid);
+  const accessSnap = await getDoc(accessRef);
+  
+  console.log("[verifyDirectAccess] Access record exists:", accessSnap.exists());
+  if (accessSnap.exists()) {
+    console.log("[verifyDirectAccess] Access data:", accessSnap.data());
+  }
+  
+  const hasAccess = accessSnap.exists() && accessSnap.data()?.active === true;
+  console.log("[verifyDirectAccess] Has access:", hasAccess);
+
+  if (!hasAccess) return { valid: false, emailKnown: false };
+
+  const document: Document = {
+    id: docSnap.id,
+    name: data.name ?? "",
+    url: data.dataUrl ?? "",
+    dataUrl: data.dataUrl ?? "",
+    pageCount: data.pageCount ?? 0,
+    sizeBytes: data.sizeBytes ?? 0,
+    uploadedAt: data.createdAt?.toDate?.()?.toISOString() ?? "",
+    sharedWith: data.sharedWith ?? [],
+    uploadedBy: data.ownerId ?? "",
+    ownerId: data.ownerId ?? "",
+  };
+
+  return { valid: true, emailKnown: true, document, recipientEmail: identity.email };
+}
+
+/**
+ * Verify a tracking token (shareLinks/{linkId}).
+ * The authenticated user must be the link recipient or the document owner.
  */
 export async function verifyToken(
   token: string,
-  viewerRecipientId: string,
+  identity: { uid: string; email: string },
 ): Promise<VerifyTokenResult> {
-  try {
-    return await backendClient.get<VerifyTokenResult>(
-      `/api/links/${token}?viewerRecipientId=${viewerRecipientId}`,
-    );
-  } catch {
-    // 404 => invalid token; fall back to mock logic if backend is unreachable.
-    await delay();
-    const link = mockStore.links.find((l) => l.token === token);
-    if (!link) {
-      return { valid: false, emailKnown: false };
-    }
-    const document = mockStore.documents.find((d) => d.id === link.documentId);
-    if (!document) {
-      return { valid: false, emailKnown: false };
-    }
-    // A viewer is authorized if they are the link's intended recipient,
-    // are in the document's explicit sharedWith list (valid sharing record),
-    // or are the document uploader.
-    const isAuthorizedViewer =
-      viewerRecipientId === link.recipientId ||
-      document.sharedWith.includes(viewerRecipientId) ||
-      viewerRecipientId === document.uploadedBy;
-    if (!isAuthorizedViewer) {
-      return { valid: false, emailKnown: false };
-    }
-    return {
-      valid: true,
-      emailKnown: true,
-      document,
-    };
+  // Use the identity uid passed from ViewerGate instead of auth.currentUser
+  const uid = identity.uid;
+  
+  console.log("[verifyToken] Verifying token:", { token, uid });
+
+  if (!uid) {
+    console.log("[verifyToken] No user ID in identity");
+    return { valid: false, emailKnown: false };
   }
+
+  // 1. Read shareLinks/{linkId}
+  const linkRef = doc(db, "shareLinks", token);
+  const linkSnap = await getDoc(linkRef);
+  
+  console.log("[verifyToken] Link exists:", linkSnap.exists());
+  if (!linkSnap.exists()) {
+    console.log("[verifyToken] Link not found");
+    return { valid: false, emailKnown: false };
+  }
+
+  const link = linkSnap.data();
+  console.log("[verifyToken] Link data:", { documentId: link.documentId, recipientId: link.recipientId, active: link.active });
+  
+  if (!link.active) {
+    console.log("[verifyToken] Link not active");
+    return { valid: false, emailKnown: false };
+  }
+
+  // 2. Check if current user is the link recipient OR has access via access subcollection
+  const isLinkRecipient = link.recipientId === uid;
+  console.log("[verifyToken] Is link recipient:", isLinkRecipient);
+  
+  const accessRef = doc(db, "documents", link.documentId, "access", uid);
+  const accessSnap = await getDoc(accessRef);
+  
+  console.log("[verifyToken] Access record exists:", accessSnap.exists());
+  if (accessSnap.exists()) {
+    console.log("[verifyToken] Access data:", accessSnap.data());
+  }
+  
+  const hasAccess = accessSnap.exists() && accessSnap.data()?.active === true;
+  console.log("[verifyToken] Has access:", hasAccess);
+  
+  if (!isLinkRecipient && !hasAccess) {
+    console.log("[verifyToken] Access denied - not recipient and no access");
+    return { valid: false, emailKnown: false };
+  }
+
+  // 3. Read documents/{documentId}
+  const docRef = doc(db, "documents", link.documentId);
+  const docSnap = await getDoc(docRef);
+  if (!docSnap.exists()) return { valid: false, emailKnown: false };
+
+  const data = docSnap.data();
+
+  // 4. Final access check (using the hasAccess variable from step 2)
+  if (!hasAccess) return { valid: false, emailKnown: false };
+
+  const document: Document = {
+    id: docSnap.id,
+    name: data.name ?? "",
+    url: data.dataUrl ?? "",
+    dataUrl: data.dataUrl ?? "",
+    pageCount: data.pageCount ?? 0,
+    sizeBytes: data.sizeBytes ?? 0,
+    uploadedAt: data.createdAt?.toDate?.()?.toISOString() ?? "",
+    sharedWith: data.sharedWith ?? [],
+    uploadedBy: data.ownerId ?? "",
+    ownerId: data.ownerId ?? "",
+  };
+
+  return { valid: true, emailKnown: true, document, recipientEmail: identity.email };
 }
 
 /**
  * Submit the recipient's email for a token.
- * In a real system this would send an OTP email.
+ * With Firebase Auth, the user is already authenticated, so this is a no-op.
  */
 export async function submitEmail(
-  _token: string,
+  token: string,
   email: string,
 ): Promise<{ success: boolean; message: string }> {
-  await delay();
+  void token;
   if (!email || !email.includes("@")) {
     return { success: false, message: "Please enter a valid email address." };
-  }
-  return { success: true, message: "OTP sent to your email." };
-}
-
-/**
- * Verify the OTP code. For the POC, any 6-digit code works.
- */
-export async function verifyOtp(
-  _token: string,
-  otp: string,
-): Promise<{ success: boolean; message: string }> {
-  await delay();
-  if (!/^\d{6}$/.test(otp)) {
-    return { success: false, message: "OTP must be 6 digits." };
   }
   return { success: true, message: "Access granted." };
 }
 
 /**
+ * Verify the OTP code. With Firebase Auth, the user is already authenticated.
+ */
+export async function verifyOtp(
+  token: string,
+  otp: string,
+): Promise<{ success: boolean; message: string }> {
+  void token;
+  void otp;
+  return { success: true, message: "Access granted." };
+}
+
+/**
  * Grant a viewer session. Returns the scoped session used for telemetry.
- * Verifies access via the backend first, then issues a local scoped token.
+ * The Firebase UID is the secure identity for the session.
  */
 export async function grantSession(
-  token: string,
-  viewerRecipientId: string,
+  tokenOrId: string,
+  identity: { uid: string; email: string },
 ): Promise<ViewerSession> {
-  // Verify access against the backend first.
-  const result = await verifyToken(token, viewerRecipientId);
+  // Try to verify as a token first, then as direct access
+  let result = await verifyToken(tokenOrId, identity);
+  
+  // If token verification failed, try direct access
+  if (!result.valid) {
+    result = await verifyDirectAccess(tokenOrId, identity);
+  }
+  
   if (!result.valid || !result.document) {
     throw new Error("Permission denied");
   }
 
   const document = result.document;
-  const scopedToken = mockApi.makeToken("scoped");
   return {
     documentId: document.id,
     documentTitle: document.name,
     pageCount: document.pageCount,
-    scopedToken,
-    recipientId: viewerRecipientId,
+    scopedToken: tokenOrId,
+    recipientId: identity.uid,
     grantedAt: new Date().toISOString(),
   };
 }
