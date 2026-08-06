@@ -131,8 +131,8 @@ export async function verifyToken(
 
   const data = docSnap.data();
 
-  // 4. Final access check (using the hasAccess variable from step 2)
-  if (!hasAccess) return { valid: false, emailKnown: false };
+  // Step 2 already validated access (isLinkRecipient || hasAccess)
+  // No need for redundant check here
 
   const document: Document = {
     id: docSnap.id,

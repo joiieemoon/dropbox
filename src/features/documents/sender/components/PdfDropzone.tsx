@@ -15,7 +15,7 @@ interface PdfDropzoneProps {
   error?: string | null;
 }
 
-const MAX_FILE_SIZE_MB = 25;
+const MAX_FILE_SIZE_MB = 2;
 
 export default function PdfDropzone({
   onFileAccepted,

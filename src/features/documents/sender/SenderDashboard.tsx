@@ -326,7 +326,7 @@ export default function SenderDashboard() {
       </div>
 
       {/* Shared with me section */}
-      {/* {sharedDocuments.length > 0 && (
+      {sharedDocuments.length > 0 && (
         <div className="rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800">
           <div className="border-b border-gray-200 px-6 py-4 dark:border-gray-700">
             <h2 className="text-lg font-semibold text-gray-800 dark:text-white">
@@ -381,34 +381,61 @@ export default function SenderDashboard() {
                         )}
                       </td>
                       <td className="px-6 py-3">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            // Find the share link for this document
-                            const docLinks = links.filter((l) => l.documentId === doc.id);
-                            if (docLinks.length > 0) {
-                              handleCopyLink(docLinks[0].url);
-                            } else {
-                              alert("No share link found for this document");
-                            }
-                          }}
-                          className="inline-flex items-center gap-1 rounded-lg border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-700 transition hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
-                        >
-                          <svg
-                            className="h-3.5 w-3.5"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                            strokeWidth={2}
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => navigate(`/documents/${doc.id}`)}
+                            className="inline-flex items-center gap-1 rounded-lg bg-brand-500 px-2.5 py-1 text-xs font-semibold text-white transition hover:bg-brand-600"
                           >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
-                            />
-                          </svg>
-                          Copy Link
-                        </button>
+                            <svg
+                              className="h-3.5 w-3.5"
+                              fill="none"
+                              viewBox="0 0 24 24"
+                              stroke="currentColor"
+                              strokeWidth={2}
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z"
+                              />
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                              />
+                            </svg>
+                            View
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              // Find the share link for this document
+                              const docLinks = links.filter((l) => l.documentId === doc.id);
+                              if (docLinks.length > 0) {
+                                handleCopyLink(docLinks[0].url);
+                              } else {
+                                alert("No share link found for this document");
+                              }
+                            }}
+                            className="inline-flex items-center gap-1 rounded-lg border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-700 transition hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+                          >
+                            <svg
+                              className="h-3.5 w-3.5"
+                              fill="none"
+                              viewBox="0 0 24 24"
+                              stroke="currentColor"
+                              strokeWidth={2}
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                              />
+                            </svg>
+                            Copy Link
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -417,7 +444,7 @@ export default function SenderDashboard() {
             </table>
           </div>
         </div>
-      )} */}
+      )}
 
       {/* Generated Links Table */}
       {/* <div className="rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800">

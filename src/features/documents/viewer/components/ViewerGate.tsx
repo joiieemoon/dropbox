@@ -43,7 +43,7 @@ export default function ViewerGate({ children }: ViewerGateProps) {
     let cancelled = false;
     const accessId = token || id;
     console.log("[ViewerGate] Mounted with:", { token, id, accessId });
-    
+
     if (!accessId) {
       console.log("[ViewerGate] No access ID - denying");
       setState("denied");
@@ -65,10 +65,10 @@ export default function ViewerGate({ children }: ViewerGateProps) {
       console.log("[ViewerGate] User authenticated:", identity);
 
       setState("verifying");
-      
+
       // If we have a token (share link), use verifyToken
       // If we have an id (direct access), verify directly
-      const verifyPromise = token 
+      const verifyPromise = token
         ? verifyToken(token, identity)
         : verifyDirectAccess(id!, identity);
 
@@ -81,7 +81,10 @@ export default function ViewerGate({ children }: ViewerGateProps) {
             setState("denied");
             return;
           }
-          console.log("[ViewerGate] Access granted - document found:", result.document.name);
+          console.log(
+            "[ViewerGate] Access granted - document found:",
+            result.document.name,
+          );
           setDocument(result.document);
           try {
             const session = await grantSession(accessId, identity);
