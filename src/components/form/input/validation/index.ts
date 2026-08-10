@@ -5,8 +5,8 @@ import 'yup-phone-lite';
 
 const letterRegx = /^[A-Za-z]+$/;
 export const loginvalidationSchema = yup.object().shape({
-    // email: yup.string().email(errorMessage.email).required(errorMessage.email),
-    
+    email: yup.string().email(errorMessage.email).required(errorMessage.required),
+
     password: yup
         .string()
         .required(errorMessage.required)
@@ -20,7 +20,7 @@ export const signupvalidationSchema = yup.object().shape({
 
     firstName: yup.string().matches(letterRegx, errorMessage.letter).required(errorMessage.required),
     lastName: yup.string().matches(letterRegx, errorMessage.letter).required(errorMessage.required),
-    email: yup.string().email(errorMessage.email).required(errorMessage.email),
+    email: yup.string().email(errorMessage.email).required(errorMessage.required),
     password: yup
         .string()
         .required(errorMessage.required)

@@ -41,12 +41,12 @@ export async function verifyDirectAccess(
   // Check if user has access via access subcollection
   const accessRef = doc(db, "documents", documentId, "access", uid);
   const accessSnap = await getDoc(accessRef);
-  
+
   console.log("[verifyDirectAccess] Access record exists:", accessSnap.exists());
   if (accessSnap.exists()) {
     console.log("[verifyDirectAccess] Access data:", accessSnap.data());
   }
-  
+
   const hasAccess = accessSnap.exists() && accessSnap.data()?.active === true;
   console.log("[verifyDirectAccess] Has access:", hasAccess);
 
@@ -78,7 +78,7 @@ export async function verifyToken(
 ): Promise<VerifyTokenResult> {
   // Use the identity uid passed from ViewerGate instead of auth.currentUser
   const uid = identity.uid;
-  
+
   console.log("[verifyToken] Verifying token:", { token, uid });
 
   if (!uid) {
@@ -89,7 +89,7 @@ export async function verifyToken(
   // 1. Read shareLinks/{linkId}
   const linkRef = doc(db, "shareLinks", token);
   const linkSnap = await getDoc(linkRef);
-  
+
   console.log("[verifyToken] Link exists:", linkSnap.exists());
   if (!linkSnap.exists()) {
     console.log("[verifyToken] Link not found");
@@ -98,29 +98,28 @@ export async function verifyToken(
 
   const link = linkSnap.data();
   console.log("[verifyToken] Link data:", { documentId: link.documentId, recipientId: link.recipientId, active: link.active });
-  
+
   if (!link.active) {
     console.log("[verifyToken] Link not active");
     return { valid: false, emailKnown: false };
   }
 
-  // 2. Check if current user is the link recipient OR has access via access subcollection
-  const isLinkRecipient = link.recipientId === uid;
-  console.log("[verifyToken] Is link recipient:", isLinkRecipient);
-  
+  // 2. Check if user has active access via access subcollection
+  // The access subcollection is the source of truth for permissions
   const accessRef = doc(db, "documents", link.documentId, "access", uid);
   const accessSnap = await getDoc(accessRef);
-  
+
   console.log("[verifyToken] Access record exists:", accessSnap.exists());
   if (accessSnap.exists()) {
     console.log("[verifyToken] Access data:", accessSnap.data());
   }
-  
+
   const hasAccess = accessSnap.exists() && accessSnap.data()?.active === true;
   console.log("[verifyToken] Has access:", hasAccess);
-  
-  if (!isLinkRecipient && !hasAccess) {
-    console.log("[verifyToken] Access denied - not recipient and no access");
+
+  // User must have active access in the access subcollection
+  if (!hasAccess) {
+    console.log("[verifyToken] Access denied - no active access");
     return { valid: false, emailKnown: false };
   }
 
@@ -187,12 +186,12 @@ export async function grantSession(
 ): Promise<ViewerSession> {
   // Try to verify as a token first, then as direct access
   let result = await verifyToken(tokenOrId, identity);
-  
+  console.log(result, "result testing ");
   // If token verification failed, try direct access
   if (!result.valid) {
     result = await verifyDirectAccess(tokenOrId, identity);
   }
-  
+
   if (!result.valid || !result.document) {
     throw new Error("Permission denied");
   }

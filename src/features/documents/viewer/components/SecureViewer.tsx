@@ -7,6 +7,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import ViewerGate from "./ViewerGate";
 import PdfPageRenderer from "./PdfPageRenderer";
 import { BeaconQueue } from "../telemetry/BeaconQueue";
@@ -16,6 +17,7 @@ import { useViewerSessionStore } from "../store/viewerSessionStore";
 import type { Document } from "../../types";
 
 export default function SecureViewer() {
+  const navigate = useNavigate();
   const session = useViewerSessionStore((s) => s.session);
   const [currentPage, setCurrentPage] = useState(1);
 
@@ -46,6 +48,15 @@ export default function SecureViewer() {
     setCurrentPage(page);
   }, []);
 
+  const handleClose = useCallback(() => {
+    // If there's history, go back; otherwise go to home
+    if (window.history.length > 1) {
+      navigate(-1);
+    } else {
+      navigate("/");
+    }
+  }, [navigate]);
+
   return (
     <ViewerGate>
       {(document: Document) => (
@@ -54,6 +65,7 @@ export default function SecureViewer() {
             document={document}
             currentPage={currentPage}
             onPageChange={handlePageChange}
+            onClose={handleClose}
           />
           <main className="mx-auto max-w-5xl px-4 py-6">
             <div className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
@@ -81,10 +93,12 @@ function SecureViewerHeader({
   document,
   currentPage,
   onPageChange,
+  onClose,
 }: {
   document: Document;
   currentPage: number;
   onPageChange: (page: number) => void;
+  onClose: () => void;
 }) {
   const totalPages = document.pageCount;
 
@@ -99,13 +113,35 @@ function SecureViewerHeader({
   return (
     <header className="sticky top-0 z-10 border-b border-gray-200 bg-white/90 backdrop-blur dark:border-gray-800 dark:bg-gray-900/90">
       <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3">
-        <div className="min-w-0">
-          <h1 className="truncate text-sm font-semibold text-gray-800 dark:text-white">
-            {document.name}
-          </h1>
-          <p className="text-xs text-gray-500 dark:text-gray-400">
-            Page {currentPage} of {totalPages}
-          </p>
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg border border-gray-300 p-1.5 text-gray-700 transition hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+            aria-label="Close viewer"
+          >
+            <svg
+              className="h-4 w-4"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M6 18L18 6M6 6l12 12"
+              />
+            </svg>
+          </button>
+          <div className="min-w-0">
+            <h1 className="truncate text-sm font-semibold text-gray-800 dark:text-white">
+              {document.name}
+            </h1>
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              Page {currentPage} of {totalPages}
+            </p>
+          </div>
         </div>
         <div className="flex items-center gap-2">
           {/* Pagination controls */}

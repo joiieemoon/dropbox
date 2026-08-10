@@ -27,12 +27,15 @@ const BasicTables = lazy(() => import("./features/Tables/BasicTables"));
 const SenderDashboard = lazy(
   () => import("./features/documents/sender/SenderDashboard"),
 );
-const AnalyticsDashboard = lazy(
-  () => import("./features/documents/analytics/AnalyticsDashboard"),
-);
-const SecureViewer = lazy(
-  () => import("./features/documents/viewer/components/SecureViewer"),
-);
+  const AnalyticsDashboard = lazy(
+    () => import("./features/documents/analytics/AnalyticsDashboard"),
+  );
+  const SharedDocuments = lazy(
+    () => import("./features/documents/sender/SharedDocuments"),
+  );
+  const SecureViewer = lazy(
+    () => import("./features/documents/viewer/components/SecureViewer"),
+  );
 
 export const router = createBrowserRouter([
   {
@@ -71,6 +74,7 @@ export const router = createBrowserRouter([
       { path: "basic-tables", element: <BasicTables /> },
 
       { path: "analytics", element: <AnalyticsDashboard /> },
+      { path: "shared-with-me", element: <SharedDocuments /> },
       
       // Direct document viewer for logged-in users with access
       { path: "documents/:id", element: <SecureViewer /> },

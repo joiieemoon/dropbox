@@ -9,7 +9,7 @@ import DataTable from "../../components/tables/pro-table";
 export default function BasicTables() {
   return (
     <>
-      <PageMeta title="Tables | ReactKit" description="ReactKit Tables" />
+      <PageMeta title="Tables | TrackSend" description="TrackSend Tables" />
       <PageBreadcrumb pageTitle=" Table" />
       <div className="space-y-6">
         <ComponentCard title=" Table">

@@ -1,0 +1,201 @@
+/**
+ * Shared Documents Page - shows documents shared with the current user
+ */
+
+import { useCallback, useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import {
+  listSharedDocuments,
+  listRecipients,
+  listTrackingLinks,
+} from "../api/documentsApi";
+import type { Document, Recipient, TrackingLink } from "../types";
+
+export default function SharedDocuments() {
+  const navigate = useNavigate();
+  const [sharedDocuments, setSharedDocuments] = useState<Document[]>([]);
+  const [recipients, setRecipients] = useState<Recipient[]>([]);
+  const [links, setLinks] = useState<TrackingLink[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([listSharedDocuments(), listRecipients(), listTrackingLinks()])
+      .then(([sharedDocs, recs, lks]) => {
+        if (cancelled) return;
+        setSharedDocuments(sharedDocs);
+        setRecipients(recs);
+        setLinks(lks);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const handleCopyLink = useCallback(async (url: string) => {
+    try {
+      await navigator.clipboard.writeText(url);
+    } catch {
+      window.prompt("Copy this link:", url);
+    }
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-brand-500 border-t-transparent" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-semibold text-gray-800 dark:text-white">
+          Shared with me
+        </h1>
+        <p className="text-sm text-gray-500 dark:text-gray-400">
+          Documents that other users have shared with you
+        </p>
+      </div>
+
+      {sharedDocuments.length === 0 ? (
+        <div className="rounded-2xl border border-gray-200 bg-white p-12 text-center shadow-sm dark:border-gray-700 dark:bg-gray-800">
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-gray-100 dark:bg-gray-700">
+            <svg
+              className="h-8 w-8 text-gray-400"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"
+              />
+            </svg>
+          </div>
+          <h3 className="mb-2 text-lg font-semibold text-gray-800 dark:text-white">
+            No shared documents
+          </h3>
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            You don't have any documents shared with you yet.
+          </p>
+        </div>
+      ) : (
+        <div className="rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead className="border-b border-gray-200 bg-gray-50 text-xs uppercase tracking-wide text-gray-500 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400">
+                <tr>
+                  <th className="px-6 py-3 font-medium">Name</th>
+                  <th className="px-6 py-3 font-medium">Pages</th>
+                  <th className="px-6 py-3 font-medium">Size</th>
+                  <th className="px-6 py-3 font-medium">Owner</th>
+                  <th className="px-6 py-3 font-medium">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                {sharedDocuments.map((doc) => {
+                  const owner = recipients.find((r) => r.id === doc.ownerId);
+                  return (
+                    <tr
+                      key={doc.id}
+                      className="hover:bg-gray-50 dark:hover:bg-gray-900"
+                    >
+                      <td className="px-6 py-3 font-medium text-gray-800 dark:text-white">
+                        {doc.name}
+                      </td>
+                      <td className="px-6 py-3 text-gray-500 dark:text-gray-400">
+                        {doc.pageCount}
+                      </td>
+                      <td className="px-6 py-3 text-gray-500 dark:text-gray-400">
+                        {(doc.sizeBytes / 1_000_000).toFixed(1)} MB
+                      </td>
+                      <td className="px-6 py-3 text-gray-500 dark:text-gray-400">
+                        {owner ? (
+                          <div>
+                            <p className="text-sm font-medium text-gray-800 dark:text-white">
+                              {owner.name || owner.username}
+                            </p>
+                            <p className="text-xs text-gray-500 dark:text-gray-400">
+                              {owner.email}
+                            </p>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-gray-400">
+                            Unknown
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-6 py-3">
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => navigate(`/documents/${doc.id}`)}
+                            className="inline-flex items-center gap-1 rounded-lg bg-brand-500 px-2.5 py-1 text-xs font-semibold text-white transition hover:bg-brand-600"
+                          >
+                            <svg
+                              className="h-3.5 w-3.5"
+                              fill="none"
+                              viewBox="0 0 24 24"
+                              stroke="currentColor"
+                              strokeWidth={2}
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z"
+                              />
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                              />
+                            </svg>
+                            View
+                          </button>
+                          {/* <button
+                            type="button"
+                            onClick={() => {
+                              const docLinks = links.filter((l) => l.documentId === doc.id);
+                              if (docLinks.length > 0) {
+                                handleCopyLink(docLinks[0].url);
+                              } else {
+                                alert("No share link found for this document");
+                              }
+                            }}
+                            className="inline-flex items-center gap-1 rounded-lg border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-700 transition hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+                          >
+                            <svg
+                              className="h-3.5 w-3.5"
+                              fill="none"
+                              viewBox="0 0 24 24"
+                              stroke="currentColor"
+                              strokeWidth={2}
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                              />
+                            </svg>
+                            Copy Link
+                          </button> */}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

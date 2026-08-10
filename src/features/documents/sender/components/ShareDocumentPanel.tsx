@@ -13,6 +13,8 @@ interface ShareDocumentPanelProps {
   document: Document;
   /** All available recipients. */
   recipients: Recipient[];
+  /** The recipient ID of the current user (owner) to exclude from sharing. */
+  currentRecipientId?: string;
   /** Callback to update the document in the parent state. */
   onDocumentUpdated: (doc: Document) => void;
   /** Callback when a new tracking link is generated. */
@@ -22,6 +24,7 @@ interface ShareDocumentPanelProps {
 export default function ShareDocumentPanel({
   document,
   recipients,
+  currentRecipientId,
   onDocumentUpdated,
   onLinkGenerated,
 }: ShareDocumentPanelProps) {
@@ -32,10 +35,15 @@ export default function ShareDocumentPanel({
   const [generatedLink, setGeneratedLink] = useState<TrackingLink | null>(null);
   const [copied, setCopied] = useState(false);
 
-  // Recipients who have NOT yet been shared with this document.
+  // Recipients who have NOT yet been shared with this document,
+  // and exclude the current user (owner) from the dropdown.
   const availableRecipients = useMemo(() => {
-    return recipients.filter((r) => !document.sharedWith.includes(r.id));
-  }, [recipients, document.sharedWith]);
+    return recipients.filter(
+      (r) =>
+        !document.sharedWith.includes(r.id) &&
+        r.id !== currentRecipientId,
+    );
+  }, [recipients, document.sharedWith, currentRecipientId]);
 
   // Recipients currently shared with this document.
   const sharedRecipients = useMemo(() => {

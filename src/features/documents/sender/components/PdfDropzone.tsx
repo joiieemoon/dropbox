@@ -13,6 +13,8 @@ interface PdfDropzoneProps {
   uploading?: boolean;
   /** Optional error message to display. */
   error?: string | null;
+  /** Whether the dropzone is disabled. */
+  disabled?: boolean;
 }
 
 const MAX_FILE_SIZE_MB = 2;
@@ -21,6 +23,7 @@ export default function PdfDropzone({
   onFileAccepted,
   uploading = false,
   error = null,
+  disabled = false,
 }: PdfDropzoneProps) {
   const [dragActive, setDragActive] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
@@ -28,6 +31,7 @@ export default function PdfDropzone({
 
   const onDrop = useCallback(
     (acceptedFiles: File[], rejectedFiles: FileRejection[]) => {
+      if (disabled) return;
       // Clear previous local error.
       setLocalError(null);
 
@@ -65,7 +69,7 @@ export default function PdfDropzone({
 
       onFileAccepted(file);
     },
-    [onFileAccepted],
+    [onFileAccepted, disabled],
   );
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
@@ -75,26 +79,37 @@ export default function PdfDropzone({
     maxSize: MAX_FILE_SIZE_MB * 1024 * 1024,
     multiple: false,
     noClick: true, // We handle click manually to avoid double-triggering.
+    disabled,
   });
 
   const handleClick = useCallback(() => {
-    inputRef.current?.click();
-  }, []);
+    if (!disabled) {
+      inputRef.current?.click();
+    }
+  }, [disabled]);
 
   const displayError = error ?? localError;
+
+  const dropzoneClassName = `flex flex-col items-center justify-center rounded-xl border-2 border-dashed px-6 py-10 text-center transition-colors ${
+    disabled
+      ? "cursor-not-allowed opacity-50"
+      : "cursor-pointer"
+  } ${
+    isDragActive || dragActive
+      ? "border-brand-500 bg-brand-50 dark:border-brand-400 dark:bg-brand-500/10"
+      : disabled
+        ? "border-gray-200 bg-gray-100 dark:border-gray-700 dark:bg-gray-800"
+        : "border-gray-300 bg-gray-50 hover:border-brand-400 hover:bg-brand-50/50 dark:border-gray-600 dark:bg-gray-900 dark:hover:border-brand-500 dark:hover:bg-brand-500/5"
+  }`;
 
   return (
     <div>
       <div
         {...getRootProps()}
         onClick={handleClick}
-        onDragEnter={() => setDragActive(true)}
+        onDragEnter={() => !disabled && setDragActive(true)}
         onDragLeave={() => setDragActive(false)}
-        className={`flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed px-6 py-10 text-center transition-colors ${
-          isDragActive || dragActive
-            ? "border-brand-500 bg-brand-50 dark:border-brand-400 dark:bg-brand-500/10"
-            : "border-gray-300 bg-gray-50 hover:border-brand-400 hover:bg-brand-50/50 dark:border-gray-600 dark:bg-gray-900 dark:hover:border-brand-500 dark:hover:bg-brand-500/5"
-        }`}
+        className={dropzoneClassName}
       >
         <input {...getInputProps()} ref={inputRef} />
         <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-brand-100 text-brand-600 dark:bg-brand-500/20 dark:text-brand-400">

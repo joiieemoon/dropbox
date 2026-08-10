@@ -13,12 +13,12 @@ import PageMeta from "../../../../components/common/pagemeta/PageMeta";
 import { useLogin } from "../../../../api/hooks";
 
 interface SignInFormValues {
-  username: string;
+  email: string;
   password: string;
 }
 
 const initialValues: SignInFormValues = {
-  username: "",
+  email: "",
   password: "",
 };
 
@@ -39,7 +39,7 @@ export default function SignInForm() {
     initialValues,
     validationSchema: loginvalidationSchema,
     onSubmit: (values) => {
-      login({ username: values.username, password: values.password });
+      login({ email: values.email, password: values.password });
     },
   });
 
@@ -56,12 +56,10 @@ export default function SignInForm() {
   return (
     <>
       <PageMeta
-        title="Sign In | ReactKit"
+        title="Sign In | TrackSend"
         description="Sign in to your account"
       />
       <div className="flex flex-col flex-1">
-        
-
         <div className="flex flex-col justify-center flex-1 w-full max-w-md mx-auto">
           <div>
             <div className="mb-5 sm:mb-8">
@@ -74,9 +72,10 @@ export default function SignInForm() {
             </div>
 
             <div>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-5">
+              {/* Google and X Button }
+              {/* <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-5">
                 <button className="inline-flex items-center justify-center gap-3 py-3 text-sm font-normal text-gray-700 transition-colors bg-gray-100 rounded-lg px-7 hover:bg-gray-200 hover:text-gray-800 dark:bg-white/5 dark:text-white/90 dark:hover:bg-white/10">
-                  {/* Google Icon */}
+                  Google Icon
                   <svg
                     width="20"
                     height="20"
@@ -105,7 +104,7 @@ export default function SignInForm() {
                 </button>
 
                 <button className="inline-flex items-center justify-center gap-3 py-3 text-sm font-normal text-gray-700 transition-colors bg-gray-100 rounded-lg px-7 hover:bg-gray-200 hover:text-gray-800 dark:bg-white/5 dark:text-white/90 dark:hover:bg-white/10">
-                  {/* X Icon */}
+                  X Icon
                   <svg
                     width="21"
                     height="20"
@@ -118,9 +117,10 @@ export default function SignInForm() {
                   </svg>
                   Sign in with X
                 </button>
-              </div>
+              </div> */}
 
-              <div className="relative py-3 sm:py-5">
+              {/* or */}
+              {/* <div className="relative py-3 sm:py-5">
                 <div className="absolute inset-0 flex items-center">
                   <div className="w-full border-t border-gray-200 dark:border-gray-800" />
                 </div>
@@ -129,7 +129,7 @@ export default function SignInForm() {
                     Or
                   </span>
                 </div>
-              </div>
+              </div> */}
 
               <form onSubmit={handleSubmit} noValidate>
                 <div className="space-y-6">
@@ -164,14 +164,14 @@ export default function SignInForm() {
                     />
                   ))}
 
-                  <div className="flex items-center justify-between">
+                  {/* <div className="flex items-center justify-between">
                     <Link
                       to="/reset-password"
                       className="text-sm text-brand-500 hover:text-brand-600 dark:text-brand-400"
                     >
                       Forgot password?
                     </Link>
-                  </div>
+                  </div> */}
 
                   <Button
                     type="submit"

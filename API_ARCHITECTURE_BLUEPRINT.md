@@ -1,8 +1,9 @@
-# ReactKit API Architecture Blueprint
+# TrackSend API Architecture Blueprint
 
 ## 1. System Architecture & Flow
 
 ### High-Level Data Flow
+
 ```
 Client (React Components)
     ↓
@@ -16,6 +17,7 @@ External API (https://dummyjson.com)
 ```
 
 ### Core Tech Stack
+
 - **Frontend**: React 19 + TypeScript
 - **State Management**: Redux Toolkit + TanStack Query (React Query)
 - **HTTP Client**: Axios
@@ -89,33 +91,35 @@ src/
 
 ### Authentication Endpoints
 
-| Method | Path | Description | Middleware | Request | Success Response | Error Responses |
-|--------|------|-------------|------------|---------|-----------------|----------------|
-| POST | `/auth/login` | Login with username/password | None | `{ username: string, password: string }` | `200: { accessToken, refreshToken, id, username, email, firstName, lastName, gender, image }` | 400, 401, 500 |
-| POST | `/auth/signup` | Register new user | None | `{ email, password, name, avatar?, role? }` | `200: { id, email, name, role, avatar, creationAt }` | 400, 401, 500 |
-| GET | `/auth/me` | Get current user profile | Bearer Token | None | `200: { id, email, firstName, lastName, username, image, phone?, address? }` | 401, 403, 404, 500 |
-| POST | `/auth/logout` | Logout user | Bearer Token | None | `200: { }` | 401, 403, 500 |
-| POST | `/auth/refresh` | Refresh access token | None | `{ refreshToken }` | `200: { accessToken, refreshToken }` | 400, 401, 500 |
+| Method | Path            | Description                  | Middleware   | Request                                     | Success Response                                                                              | Error Responses    |
+| ------ | --------------- | ---------------------------- | ------------ | ------------------------------------------- | --------------------------------------------------------------------------------------------- | ------------------ |
+| POST   | `/auth/login`   | Login with username/password | None         | `{ username: string, password: string }`    | `200: { accessToken, refreshToken, id, username, email, firstName, lastName, gender, image }` | 400, 401, 500      |
+| POST   | `/auth/signup`  | Register new user            | None         | `{ email, password, name, avatar?, role? }` | `200: { id, email, name, role, avatar, creationAt }`                                          | 400, 401, 500      |
+| GET    | `/auth/me`      | Get current user profile     | Bearer Token | None                                        | `200: { id, email, firstName, lastName, username, image, phone?, address? }`                  | 401, 403, 404, 500 |
+| POST   | `/auth/logout`  | Logout user                  | Bearer Token | None                                        | `200: { }`                                                                                    | 401, 403, 500      |
+| POST   | `/auth/refresh` | Refresh access token         | None         | `{ refreshToken }`                          | `200: { accessToken, refreshToken }`                                                          | 400, 401, 500      |
 
 ### User Endpoints
 
-| Method | Path | Description | Middleware | Request | Success Response | Error Responses |
-|--------|------|-------------|------------|---------|-----------------|----------------|
-| GET | `/users/` | Get all users (paginated) | Bearer Token | `?offset?, ?limit?, ?role?` | `200: { users: User[], total, skip, limit }` | 401, 403, 500 |
-| GET | `/users/{id}` | Get user by ID | Bearer Token | None | `200: { id, email, name, role, avatar, ... }` | 401, 403, 404, 500 |
-| POST | `/users/` | Create new user | Bearer Token | `{ email, password, name, avatar?, role? }` | `201: { id, email, name, role, avatar, ... }` | 400, 401, 403, 500 |
-| PUT | `/users/{id}` | Update user profile | Bearer Token | `{ email?, password?, name?, avatar?, address? }` | `200: { id, email, name, role, avatar, ... }` | 400, 401, 403, 404, 500 |
-| DELETE | `/users/{id}` | Delete user | Bearer Token | None | `200: { deleted: true }` | 401, 403, 404, 500 |
+| Method | Path          | Description               | Middleware   | Request                                           | Success Response                              | Error Responses         |
+| ------ | ------------- | ------------------------- | ------------ | ------------------------------------------------- | --------------------------------------------- | ----------------------- |
+| GET    | `/users/`     | Get all users (paginated) | Bearer Token | `?offset?, ?limit?, ?role?`                       | `200: { users: User[], total, skip, limit }`  | 401, 403, 500           |
+| GET    | `/users/{id}` | Get user by ID            | Bearer Token | None                                              | `200: { id, email, name, role, avatar, ... }` | 401, 403, 404, 500      |
+| POST   | `/users/`     | Create new user           | Bearer Token | `{ email, password, name, avatar?, role? }`       | `201: { id, email, name, role, avatar, ... }` | 400, 401, 403, 500      |
+| PUT    | `/users/{id}` | Update user profile       | Bearer Token | `{ email?, password?, name?, avatar?, address? }` | `200: { id, email, name, role, avatar, ... }` | 400, 401, 403, 404, 500 |
+| DELETE | `/users/{id}` | Delete user               | Bearer Token | None                                              | `200: { deleted: true }`                      | 401, 403, 404, 500      |
 
 ---
 
 ## 4. Global Configurations & Conventions
 
 ### Base URL
+
 - **Base URL**: `https://dummyjson.com` (from `VITE_API_BASE_URL` env var)
 - **No prefix** (e.g., `/api/v1` is not used)
 
 ### Authentication
+
 - **Method**: Bearer JWT token in `Authorization` header
 - **Token Storage**: localStorage with keys:
   - `access_token` (configurable via `VITE_TOKEN_KEY`)
@@ -123,17 +127,19 @@ src/
   - `token_expiry` (configurable via `VITE_TOKEN_EXPIRY_KEY`)
 
 ### Standard Error Response Format
+
 ```typescript
 interface ApiError {
-  code: string;           // e.g., "UNAUTHORIZED", "NOT_FOUND", "SERVER_ERROR"
-  message: string;        // Human-readable error message
-  status: number;         // HTTP status code
-  details?: Record<string, unknown>;  // Additional error details
-  timestamp: string;      // ISO timestamp
+  code: string; // e.g., "UNAUTHORIZED", "NOT_FOUND", "SERVER_ERROR"
+  message: string; // Human-readable error message
+  status: number; // HTTP status code
+  details?: Record<string, unknown>; // Additional error details
+  timestamp: string; // ISO timestamp
 }
 ```
 
 ### Standard Success Response Format
+
 ```typescript
 interface ApiResponse<T> {
   data: T;
@@ -143,6 +149,7 @@ interface ApiResponse<T> {
 ```
 
 ### HTTP Status Code Mapping
+
 - `401` → `UNAUTHORIZED` - Authentication required
 - `403` → `FORBIDDEN` - Permission denied
 - `404` → `NOT_FOUND` - Resource not found
@@ -152,6 +159,7 @@ interface ApiResponse<T> {
 - Other → `UNKNOWN` - Unknown error
 
 ### Query Client Configuration
+
 ```typescript
 {
   retry: 3,
@@ -164,6 +172,7 @@ interface ApiResponse<T> {
 ```
 
 ### Environment Variables
+
 ```bash
 VITE_API_BASE_URL=https://dummyjson.com
 VITE_API_TIMEOUT=30000
@@ -180,6 +189,7 @@ VITE_ENABLE_ROLE_BASED_ACCESS=false
 ## 5. Type Schemas
 
 ### LoginPayload
+
 ```typescript
 {
   username: string;
@@ -188,6 +198,7 @@ VITE_ENABLE_ROLE_BASED_ACCESS=false
 ```
 
 ### LoginResponse
+
 ```typescript
 {
   accessToken: string;
@@ -203,6 +214,7 @@ VITE_ENABLE_ROLE_BASED_ACCESS=false
 ```
 
 ### UserProfile
+
 ```typescript
 {
   id: number;
@@ -224,6 +236,7 @@ VITE_ENABLE_ROLE_BASED_ACCESS=false
 ```
 
 ### User
+
 ```typescript
 {
   id: number;
@@ -237,6 +250,7 @@ VITE_ENABLE_ROLE_BASED_ACCESS=false
 ```
 
 ### CreateUserPayload
+
 ```typescript
 {
   email: string;
@@ -248,6 +262,7 @@ VITE_ENABLE_ROLE_BASED_ACCESS=false
 ```
 
 ### UpdateUserPayload
+
 ```typescript
 {
   email?: string;
@@ -259,6 +274,7 @@ VITE_ENABLE_ROLE_BASED_ACCESS=false
 ```
 
 ### UserQueryParams
+
 ```typescript
 {
   offset?: number;
@@ -272,41 +288,45 @@ VITE_ENABLE_ROLE_BASED_ACCESS=false
 ## 6. Query & Mutation Keys
 
 ### AUTH_QUERY_KEYS
+
 ```typescript
 {
-  ALL: ["auth"]
-  LOGIN: (payload: { email: string }) => ["auth", "login", email]
-  PROFILE: () => ["auth", "profile"]
-  REFRESH: () => ["auth", "refresh"]
+  ALL: ["auth"];
+  LOGIN: (payload: { email: string }) => ["auth", "login", email];
+  PROFILE: () => ["auth", "profile"];
+  REFRESH: () => ["auth", "refresh"];
 }
 ```
 
 ### USER_QUERY_KEYS
+
 ```typescript
 {
-  ALL: ["users"]
-  LISTS: () => ["users", "list"]
-  LIST: (filters?: Record<string, unknown>) => ["users", "list", filters]
-  DETAILS: () => ["users", "detail"]
-  DETAIL: (id: number) => ["users", "detail", id]
+  ALL: ["users"];
+  LISTS: () => ["users", "list"];
+  LIST: (filters?: Record<string, unknown>) => ["users", "list", filters];
+  DETAILS: () => ["users", "detail"];
+  DETAIL: (id: number) => ["users", "detail", id];
 }
 ```
 
 ### AUTH_MUTATION_KEYS
+
 ```typescript
 {
-  LOGIN: () => ["auth", "login"]
-  SIGNUP: () => ["auth", "signup"]
-  LOGOUT: () => ["auth", "logout"]
+  LOGIN: () => ["auth", "login"];
+  SIGNUP: () => ["auth", "signup"];
+  LOGOUT: () => ["auth", "logout"];
 }
 ```
 
 ### USER_MUTATION_KEYS
+
 ```typescript
 {
-  CREATE: () => ["users", "create"]
-  UPDATE: (id: number) => ["users", "update", id]
-  DELETE: (id: number) => ["users", "delete", id]
+  CREATE: () => ["users", "create"];
+  UPDATE: (id: number) => ["users", "update", id];
+  DELETE: (id: number) => ["users", "delete", id];
 }
 ```
 
@@ -315,6 +335,7 @@ VITE_ENABLE_ROLE_BASED_ACCESS=false
 ## 7. Redux State Structure
 
 ### AuthState
+
 ```typescript
 {
   user: UserProfile | null;
@@ -327,6 +348,7 @@ VITE_ENABLE_ROLE_BASED_ACCESS=false
 ```
 
 ### Auth Slice Actions
+
 - `setCredentials` - Set user and tokens
 - `setUserProfile` - Set user profile
 - `setLoading` - Set loading state
@@ -338,15 +360,15 @@ VITE_ENABLE_ROLE_BASED_ACCESS=false
 
 ## 8. Available Hooks
 
-| Hook | Type | Endpoint | Description |
-|------|------|----------|-------------|
-| `useLogin` | Mutation | POST /auth/login | Login with credentials |
-| `useSignup` | Mutation | POST /users/ | Register new user |
-| `useLogout` | Mutation | POST /auth/logout | Logout user |
-| `useUserProfile` | Query | GET /auth/me | Fetch current user profile |
-| `useUpdateProfile` | Mutation | PUT /users/{id} | Update user profile |
-| `useUsers` | Query | GET /users/ | Fetch all users (paginated) |
-| `useUser` | Query | GET /users/{id} | Fetch user by ID |
-| `useCreateUser` | Mutation | POST /users/ | Create new user |
-| `useUpdateUser` | Mutation | PUT /users/{id} | Update user |
-| `useDeleteUser` | Mutation | DELETE /users/{id} | Delete user |
+| Hook               | Type     | Endpoint           | Description                 |
+| ------------------ | -------- | ------------------ | --------------------------- |
+| `useLogin`         | Mutation | POST /auth/login   | Login with credentials      |
+| `useSignup`        | Mutation | POST /users/       | Register new user           |
+| `useLogout`        | Mutation | POST /auth/logout  | Logout user                 |
+| `useUserProfile`   | Query    | GET /auth/me       | Fetch current user profile  |
+| `useUpdateProfile` | Mutation | PUT /users/{id}    | Update user profile         |
+| `useUsers`         | Query    | GET /users/        | Fetch all users (paginated) |
+| `useUser`          | Query    | GET /users/{id}    | Fetch user by ID            |
+| `useCreateUser`    | Mutation | POST /users/       | Create new user             |
+| `useUpdateUser`    | Mutation | PUT /users/{id}    | Update user                 |
+| `useDeleteUser`    | Mutation | DELETE /users/{id} | Delete user                 |

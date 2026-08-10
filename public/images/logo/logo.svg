@@ -1,28 +1,20 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" width="100%" height="100%">
-  <g fill="none" stroke="#465FFF" stroke-width="8" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M 120,20 L 155,40 L 120,60 L 85,40 Z" />
-    <path d="M 120,60 L 120,100" />
-    <path d="M 85,40 L 85,80" />
-    <path d="M 155,40 L 155,80" />
-    <path d="M 85,80 L 120,100 L 155,80" />
+  <g fill="none" stroke="#465FFF" stroke-linecap="round" stroke-linejoin="round">
+    <!-- PDF Document Card Outline -->
+    <path d="M 60,35 L 140,35 L 180,75 L 180,205 C 180,210.5 175.5,215 170,215 L 70,215 C 64.5,215 60,210.5 60,205 Z" stroke-width="8" />
+    <!-- Folded Corner of Document -->
+    <path d="M 140,35 L 140,75 L 180,75" stroke-width="8" />
 
-    <path d="M 85,80 L 50,100 L 50,140 L 85,160 L 120,140 L 120,100" />
-    <path d="M 85,160 L 85,120 L 50,100" />
-    <path d="M 85,120 L 120,100" />
-    <path d="M 68,115 L 60,120 L 68,125" stroke-width="6" />
-    <path d="M 98,112 L 98,132" stroke-width="6" />
-    <path d="M 98,112 L 108,112 L 112,117 L 108,122 L 98,122" stroke-width="6" />
-    <path d="M 106,122 L 112,132" stroke-width="6" />
+    <!-- Sending / Forward Motion Arrow Line -->
+    <path d="M 85,115 L 145,115 M 130,100 L 145,115 L 130,130" stroke-width="9" />
 
-    <path d="M 120,100 L 155,80 L 190,100 L 190,140 L 155,160 L 120,140" />
-    <path d="M 155,160 L 155,120 L 190,100" />
-    <path d="M 155,120 L 120,100" />
-    <path d="M 138,112 L 138,132" stroke-width="6" />
-    <path d="M 148,112 L 148,132" stroke-width="6" />
-    <path d="M 160,112 L 149,122 L 160,132" stroke-width="6" />
+    <!-- Document Content Lines -->
+    <path d="M 85,85 L 120,85" stroke-width="7" opacity="0.6" />
     
-    <path d="M 85,160 L 120,180 L 155,160" />
-    <path d="M 120,140 L 120,180" />
+    <!-- Tracking / Analytics Chart Signal at the Bottom -->
+    <path d="M 85,175 L 105,155 L 125,165 L 155,135" stroke-width="8" />
+    <!-- Pulse Node Dot -->
+    <circle cx="155" cy="135" r="4" fill="#465FFF" />
   </g>
 </svg>

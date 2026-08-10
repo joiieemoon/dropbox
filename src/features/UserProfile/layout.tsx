@@ -1,7 +1,7 @@
 import PageMeta from "../../components/common/pagemeta/PageMeta";
 import UserMetaCard from "./components/user-metacard";
 import UserInfoCard from "./components/user-infocard";
-import UserAddressCard from "./components/user-addresscard";
+
 import { useUserProfile } from "../../api/hooks";
 import { Spinner } from "../../components/common/spinner";
 
@@ -12,7 +12,7 @@ export default function UserProfiles() {
     return (
       <>
         <PageMeta
-          title="User Profile | ReactKit"
+          title="User Profile | TrackSend"
           description="Manage your profile"
         />
         <div className="flex items-center justify-center h-64">
@@ -27,7 +27,7 @@ export default function UserProfiles() {
     return (
       <>
         <PageMeta
-          title="User Profile | ReactKit"
+          title="User Profile | TrackSend"
           description="Manage your profile"
         />
         <div className="flex items-center justify-center h-64">
@@ -40,7 +40,7 @@ export default function UserProfiles() {
   return (
     <>
       <PageMeta
-        title="User Profile | ReactKit"
+        title="User Profile | TrackSend"
         description="Manage your profile"
       />
       <div className="space-y-6">

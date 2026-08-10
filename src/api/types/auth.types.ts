@@ -9,7 +9,7 @@ import { ApiResponse } from "./api.types";
  * Login request payload.
  */
 export interface LoginPayload {
-  username: string;
+  email: string;
   password: string;
 }
 
@@ -71,6 +71,7 @@ export interface UserProfile {
   lastName: string;
   username: string;
   image: string;
+  name: string;
   creationAt?: string;
   // Firebase UID (the secure, stable identity for this app)
   firebaseUid?: string;

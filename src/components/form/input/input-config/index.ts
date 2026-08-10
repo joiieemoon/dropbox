@@ -88,9 +88,9 @@ export const locationFields = [
 ];
 export const loginFields: FormField[] = [
     {
-        name: "username",
+        name: "email",
         label: "Email",
-        type: "text",
+        type: "email",
         placeholder: "name@yopmail.com",
         autoComplete: "email",
     },
@@ -181,7 +181,7 @@ export const personalFields: ProfileField[] = [
         required: true,
         colSpan: 6,
     },
-    
+
     {
         name: "bio",
         label: "Bio",

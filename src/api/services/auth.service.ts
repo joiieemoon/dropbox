@@ -69,13 +69,9 @@ async function writeUserDoc(
  * Login with email and password via Firebase Authentication.
  */
 export async function login(payload: LoginPayload): Promise<LoginResponse> {
-  // The form submits "username" but we treat it as email for Firebase.
-  const email = payload.username.includes("@")
-    ? payload.username
-    : `${payload.username}@x.dummyjson.com`;
   const userCredential = await signInWithEmailAndPassword(
     auth,
-    email,
+    payload.email,
     payload.password,
   );
   const user = userCredential.user;
@@ -86,7 +82,7 @@ export async function login(payload: LoginPayload): Promise<LoginResponse> {
     id: 0,
     accessToken: await user.getIdToken(),
     refreshToken: user.refreshToken ?? undefined,
-    email: user.email ?? email,
+    email: user.email ?? payload.email,
     username: user.displayName ?? user.email?.split("@")[0] ?? "",
     firstName: user.displayName?.split(" ")[0] ?? "",
     lastName: user.displayName?.split(" ").slice(1).join(" ") ?? "",

@@ -8,6 +8,7 @@ import {
   HorizontaLDots,
   PieChartIcon,
   UserCircleIcon,
+  FolderIcon,
 } from "../../icons";
 import { useSidebar } from "../../context/SidebarContext";
 
@@ -34,6 +35,11 @@ const navItems: NavItem[] = [
     icon: <FileIcon />,
     name: "Documents",
     path: "/documents",
+  },
+  {
+    icon: <FolderIcon />,
+    name: "Shared with me",
+    path: "/shared-with-me",
   },
   {
     icon: <PieChartIcon />,

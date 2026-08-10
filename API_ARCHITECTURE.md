@@ -1,4 +1,4 @@
-# ReactKit API Architecture
+# TrackSend API Architecture
 
 A production-grade, enterprise-ready API architecture for React 19 applications.
 
@@ -269,7 +269,7 @@ function UserProfile() {
 ```bash
 # .env
 VITE_API_BASE_URL=https://dummyjson.com
-VITE_APP_NAME=ReactKit
+VITE_APP_NAME=TrackSend
 VITE_APP_VERSION=1.0.0
 VITE_NODE_ENV=production
 VITE_TOKEN_KEY=access_token

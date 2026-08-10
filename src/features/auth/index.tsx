@@ -23,7 +23,7 @@ export default function AuthLayout() {
                 />
               </Link>
               <p className="text-center text-[#3684EE] dark:text-[#1872f1]">
-                Free and Open-Source Tailwind CSS Admin Dashboard Template
+                Share Seamlessly. Track Effortlessly.
               </p>
             </div>
           </div>

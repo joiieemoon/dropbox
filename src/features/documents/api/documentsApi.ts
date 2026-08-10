@@ -208,6 +208,34 @@ export async function listTrackingLinks(): Promise<TrackingLink[]> {
 }
 
 /**
+ * Revoke access for a recipient to a document.
+ * Sets the access record to inactive and removes from sharedWith array.
+ */
+export async function revokeAccess(
+  documentId: string,
+  recipientId: string,
+): Promise<void> {
+  const uid = auth.currentUser?.uid;
+  if (!uid) throw new Error("You must be signed in to revoke access");
+
+  // Verify ownership
+  const docRef = doc(db, "documents", documentId);
+  const docSnap = await getDoc(docRef);
+  if (!docSnap.exists()) throw new Error("Document not found");
+  if (docSnap.data()?.ownerId !== uid) throw new Error("You can only revoke access for your own documents");
+
+  // Set access record to inactive
+  const accessRef = doc(db, "documents", documentId, "access", recipientId);
+  await updateDoc(accessRef, { active: false });
+
+  // Remove from sharedWith array
+  const data = docSnap.data();
+  const existing = data?.sharedWith ?? [];
+  const updated = existing.filter((id: string) => id !== recipientId);
+  await updateDoc(docRef, { sharedWith: updated });
+}
+
+/**
  * Delete a document and all its associated data (access, views, shareLinks).
  * Only the document owner can delete it.
  */

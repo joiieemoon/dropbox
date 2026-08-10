@@ -77,7 +77,7 @@ export default function MuiLibraryKit() {
   return (
     <div>
       <PageMeta
-        title="MUI Library Kit | ReactKit"
+        title="MUI Library Kit | TrackSend"
         description="Interactive MUI components showcase"
       />
       <PageBreadcrumb pageTitle="MUI Library Kit" />
@@ -120,7 +120,7 @@ export default function MuiLibraryKit() {
                 <Typography sx={{ fontWeight: 500 }}>
                   Notification Preferences
                 </Typography>
-              </AccordionSummary> 
+              </AccordionSummary>
               <AccordionDetails>
                 <Typography variant="body2" color="text.secondary">
                   Choose which notifications you receive — email, push, or SMS.
