@@ -21,7 +21,6 @@ export class BeaconQueue {
   private readonly documentId: string;
   private readonly recipientId: string;
   private readonly pageCount: number;
-  private readonly startedAt: number;
 
   constructor(input: {
     sessionId: string;
@@ -35,7 +34,6 @@ export class BeaconQueue {
     this.documentId = input.documentId;
     this.recipientId = input.recipientId;
     this.pageCount = input.pageCount;
-    this.startedAt = Date.now();
   }
 
   /**

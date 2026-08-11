@@ -27,6 +27,11 @@ export async function listDocumentAnalytics(): Promise<DocumentAnalytics[]> {
     const viewsQuery = collection(db, "documents", documentId, "views");
     const viewsSnap = await getDocs(viewsQuery);
 
+    // Only count viewers who are actual recipients (sharedWith).
+    // The owner's own views (e.g. when they open their document to check it)
+    // should NOT be included in analytics calculations.
+    const sharedViewerIds = new Set(sharedWith);
+
     // Aggregate view data.
     // Each beacon flush sends DELTA values (queue is cleared after each flush),
     // so we SUM all events to get the correct total.
@@ -40,6 +45,11 @@ export async function listDocumentAnalytics(): Promise<DocumentAnalytics[]> {
       const seconds = vd.seconds ?? 0;
       const viewerId = vd.viewerId ?? "";
       const completion = vd.completionPercent ?? 0;
+
+      // Skip events from non-recipients (e.g. the owner viewing their own document)
+      if (!viewerId || !sharedViewerIds.has(viewerId)) {
+        return;
+      }
 
       // Skip summary events (they have completionPercent and duplicate the total)
       if (vd.completionPercent !== undefined) {

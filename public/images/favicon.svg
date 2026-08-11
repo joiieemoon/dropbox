@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" width="100%" height="100%">
+  <g fill="none" stroke="#465FFF" stroke-linecap="round" stroke-linejoin="round">
+    <!-- PDF Document Card Outline -->
+    <path d="M 60,35 L 140,35 L 180,75 L 180,205 C 180,210.5 175.5,215 170,215 L 70,215 C 64.5,215 60,210.5 60,205 Z" stroke-width="8" />
+    <!-- Folded Corner of Document -->
+    <path d="M 140,35 L 140,75 L 180,75" stroke-width="8" />
+
+    <!-- Sending / Forward Motion Arrow Line -->
+    <path d="M 85,115 L 145,115 M 130,100 L 145,115 L 130,130" stroke-width="9" />
+
+    <!-- Document Content Lines -->
+    <path d="M 85,85 L 120,85" stroke-width="7" opacity="0.6" />
+    
+    <!-- Tracking / Analytics Chart Signal at the Bottom -->
+    <path d="M 85,175 L 105,155 L 125,165 L 155,135" stroke-width="8" />
+    <!-- Pulse Node Dot -->
+    <circle cx="155" cy="135" r="4" fill="#465FFF" />
+  </g>
+</svg>

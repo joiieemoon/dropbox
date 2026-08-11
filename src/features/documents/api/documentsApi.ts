@@ -236,6 +236,41 @@ export async function revokeAccess(
 }
 
 /**
+ * Toggle access for a recipient to a document.
+ * Enables or disables the recipient's access record without removing them
+ * from the sharedWith list (so analytics history is preserved).
+ */
+export async function toggleAccess(
+  documentId: string,
+  recipientId: string,
+  active: boolean,
+): Promise<void> {
+  const uid = auth.currentUser?.uid;
+  if (!uid) throw new Error("You must be signed in to manage access");
+
+  // Verify ownership
+  const docRef = doc(db, "documents", documentId);
+  const docSnap = await getDoc(docRef);
+  if (!docSnap.exists()) throw new Error("Document not found");
+  if (docSnap.data()?.ownerId !== uid)
+    throw new Error("You can only manage access for your own documents");
+
+  // Set access record active/inactive
+  const accessRef = doc(db, "documents", documentId, "access", recipientId);
+  await setDoc(
+    accessRef,
+    {
+      userId: recipientId,
+      role: "viewer",
+      grantedBy: uid,
+      grantedAt: serverTimestamp(),
+      active,
+    },
+    { merge: true },
+  );
+}
+
+/**
  * Delete a document and all its associated data (access, views, shareLinks).
  * Only the document owner can delete it.
  */

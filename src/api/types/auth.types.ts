@@ -71,7 +71,7 @@ export interface UserProfile {
   lastName: string;
   username: string;
   image: string;
-  name: string;
+  name?: string;
   creationAt?: string;
   // Firebase UID (the secure, stable identity for this app)
   firebaseUid?: string;

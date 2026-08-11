@@ -2,7 +2,7 @@ import { createBrowserRouter, Navigate } from "react-router-dom";
 import { lazy } from "react";
 import { PublicRoute } from "./components/common/routes";
 import { ProtectedRoute } from "./components/common/routes";
-import MuiElements from "./features/mui";
+// import MuiElements from "./features/mui";
 // Layouts
 const AppLayout = lazy(() => import("./components/layout/AppLayout"));
 
@@ -17,11 +17,7 @@ const SignUp = lazy(() => import("./features/auth/components/signup-form"));
 const NotFound = lazy(() => import("./features/OtherPage"));
 const UserProfiles = lazy(() => import("./features/UserProfile/layout"));
 
-// Forms
-// const FormElements = lazy(() => import("./features/Forms/FormElements"));
 
-// Tables
-const BasicTables = lazy(() => import("./features/Tables/BasicTables"));
 
 // Document Tracking & Analytics POC
 const SenderDashboard = lazy(
@@ -66,12 +62,7 @@ export const router = createBrowserRouter([
       // Profile
       { path: "profile", element: <UserProfiles /> },
 
-      // Forms
-      // { path: "form-elements", element: <FormElements /> },
-
-      // Tables
-      { path: "mui-elements", element: <MuiElements /> },
-      { path: "basic-tables", element: <BasicTables /> },
+     
 
       { path: "analytics", element: <AnalyticsDashboard /> },
       { path: "shared-with-me", element: <SharedDocuments /> },

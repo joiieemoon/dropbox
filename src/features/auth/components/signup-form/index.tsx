@@ -1,6 +1,5 @@
 import { useFormik } from "formik";
 import { Link } from "react-router-dom";
-import { ChevronLeftIcon } from "../../../../icons";
 import InputField from "../../../../components/form/input/input-fields/InputField.tsx";
 import Button from "../../../../components/ui/button/Button";
 import { signupFields } from "../../../../components/form/input/input-config/index.ts";

@@ -23,6 +23,7 @@ export function mapLoginResponse(
       lastName: response.lastName,
       username: response.username,
       image: response.image,
+      name: `${response.firstName} ${response.lastName}`.trim(),
       creationAt: "",
       firebaseUid: response.firebaseUid,
     },
@@ -42,6 +43,7 @@ export function mapSignupResponse(
     lastName: "",
     username: "",
     image: response.avatar,
+    name: response.name,
     creationAt: response.creationAt,
     firebaseUid: response.firebaseUid,
   };
@@ -60,6 +62,7 @@ export function mapUserProfile(
     lastName: response.lastName,
     username: response.username,
     image: response.image,
+    name: response.name || `${response.firstName} ${response.lastName}`.trim(),
     creationAt: response.creationAt,
     firebaseUid: response.firebaseUid,
   };

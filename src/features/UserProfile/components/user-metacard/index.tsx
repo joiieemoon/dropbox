@@ -14,7 +14,7 @@ import { useUpdateProfile } from "../../../../api/hooks";
 import { profileValidationSchema } from "../../../../components/form/input/validation";
 
 export default function UserMetaCard() {
-  const { isOpen, openModal, closeModal } = useModal();
+  const { isOpen, closeModal } = useModal();
   const user = useAppSelector(selectUser);
   const { mutate: updateProfile, isPending } = useUpdateProfile();
 

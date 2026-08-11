@@ -35,41 +35,41 @@ export default function SenderDashboard() {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [justUploadedDoc, setJustUploadedDoc] = useState<Document | null>(null);
 
-  // Inline share state (add user to an already-uploaded document).
-  const [shareOpenDocId, setShareOpenDocId] = useState<string | null>(null);
+  // Share modal state (add user to an already-uploaded document).
+  const [shareDoc, setShareDoc] = useState<Document | null>(null);
   const [shareRecipientId, setShareRecipientId] = useState("");
   const [sharing, setSharing] = useState(false);
   const [shareError, setShareError] = useState<string | null>(null);
   const [shareSuccess, setShareSuccess] = useState<string | null>(null);
 
-  const handleShareDocument = useCallback(
-    async (doc: Document) => {
-      if (!shareRecipientId) return;
-      setSharing(true);
-      setShareError(null);
-      setShareSuccess(null);
-      try {
-        await shareDocument(doc.id, shareRecipientId);
-        setDocuments((prev) =>
-          prev.map((d) =>
-            d.id === doc.id
-              ? { ...d, sharedWith: [...d.sharedWith, shareRecipientId] }
-              : d,
-          ),
-        );
-        setShareSuccess(
-          `Shared with ${recipients.find((r) => r.id === shareRecipientId)?.username ?? "user"}!`,
-        );
-        setShareRecipientId("");
-        setShareOpenDocId(null);
-      } catch {
-        setShareError("Failed to share the document. Please try again.");
-      } finally {
-        setSharing(false);
-      }
-    },
-    [shareRecipientId, recipients],
-  );
+  const handleShareDocument = useCallback(async () => {
+    if (!shareDoc || !shareRecipientId) return;
+    setSharing(true);
+    setShareError(null);
+    setShareSuccess(null);
+    try {
+      await shareDocument(shareDoc.id, shareRecipientId);
+      setDocuments((prev) =>
+        prev.map((d) =>
+          d.id === shareDoc.id
+            ? { ...d, sharedWith: [...d.sharedWith, shareRecipientId] }
+            : d,
+        ),
+      );
+      setShareSuccess(
+        `Shared with ${recipients.find((r) => r.id === shareRecipientId)?.username ?? "user"}!`,
+      );
+      setShareRecipientId("");
+      setTimeout(() => {
+        setShareDoc(null);
+        setShareSuccess(null);
+      }, 1200);
+    } catch {
+      setShareError("Failed to share the document. Please try again.");
+    } finally {
+      setSharing(false);
+    }
+  }, [shareDoc, shareRecipientId, recipients]);
 
   useEffect(() => {
     let cancelled = false;
@@ -366,11 +366,12 @@ export default function SenderDashboard() {
                             )}
                             <button
                               type="button"
-                              onClick={() =>
-                                setShareOpenDocId(
-                                  shareOpenDocId === doc.id ? null : doc.id,
-                                )
-                              }
+                              onClick={() => {
+                                setShareDoc(doc);
+                                setShareRecipientId("");
+                                setShareError(null);
+                                setShareSuccess(null);
+                              }}
                               className="inline-flex items-center gap-0.5 rounded-full border border-dashed border-brand-300 px-2 py-0.5 text-xs font-medium text-brand-600 transition hover:bg-brand-50 dark:border-brand-500/40 dark:text-brand-300 dark:hover:bg-brand-500/10"
                             >
                               <svg
@@ -390,63 +391,6 @@ export default function SenderDashboard() {
                             </button>
                           </div>
 
-                          {shareOpenDocId === doc.id && (
-                            <div className="mt-2 flex items-center gap-1.5">
-                              <select
-                                value={shareRecipientId}
-                                onChange={(e) =>
-                                  setShareRecipientId(e.target.value)
-                                }
-                                className="w-40 rounded-lg border border-gray-300 bg-white px-2 py-1 text-xs text-gray-800 outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 dark:border-gray-600 dark:bg-gray-900 dark:text-white"
-                              >
-                                <option value="">
-                                  Select user…
-                                </option>
-                                {recipients
-                                  .filter(
-                                    (r) =>
-                                      !doc.sharedWith.includes(r.id) &&
-                                      r.id !== viewerIdentity?.recipientId,
-                                  )
-                                  .map((rec) => (
-                                    <option key={rec.id} value={rec.id}>
-                                      {rec.username} ({rec.email})
-                                    </option>
-                                  ))}
-                              </select>
-                              <button
-                                type="button"
-                                onClick={() => handleShareDocument(doc)}
-                                disabled={!shareRecipientId || sharing}
-                                className="shrink-0 rounded-lg bg-brand-500 px-2.5 py-1 text-xs font-semibold text-white transition hover:bg-brand-600 disabled:opacity-60"
-                              >
-                                {sharing ? "Sharing…" : "Share"}
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setShareOpenDocId(null);
-                                  setShareRecipientId("");
-                                  setShareError(null);
-                                  setShareSuccess(null);
-                                }}
-                                className="shrink-0 rounded-lg border border-gray-300 px-2 py-1 text-xs font-medium text-gray-600 transition hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
-                              >
-                                Cancel
-                              </button>
-                            </div>
-                          )}
-
-                          {shareError && shareOpenDocId === doc.id && (
-                            <p className="mt-1 text-xs text-red-500">
-                              {shareError}
-                            </p>
-                          )}
-                          {shareSuccess && shareOpenDocId === doc.id && (
-                            <p className="mt-1 text-xs text-emerald-600 dark:text-emerald-400">
-                              {shareSuccess}
-                            </p>
-                          )}
                         </td>
                         <td className="px-6 py-3">
                           {docLinks.length > 0 ? (
@@ -530,6 +474,119 @@ export default function SenderDashboard() {
           </div>
         )}
       </div>
+
+      {/* Share Modal */}
+      {shareDoc && (
+        <div
+          className="fixed inset-0 z-99999990 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
+          onClick={() => {
+            if (!sharing) {
+              setShareDoc(null);
+              setShareRecipientId("");
+              setShareError(null);
+              setShareSuccess(null);
+            }
+          }}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl dark:bg-gray-800"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-gray-800 dark:text-white">
+                Share Document
+              </h3>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!sharing) {
+                    setShareDoc(null);
+                    setShareRecipientId("");
+                    setShareError(null);
+                    setShareSuccess(null);
+                  }
+                }}
+                className="rounded-full p-1.5 text-gray-400 transition hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-700 dark:hover:text-gray-300"
+              >
+                <svg
+                  className="h-5 w-5"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                </svg>
+              </button>
+            </div>
+
+            <p className="mb-4 truncate text-sm text-gray-500 dark:text-gray-400">
+              {shareDoc.name}
+            </p>
+
+            <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">
+              Select user to share with
+            </label>
+            <select
+              value={shareRecipientId}
+              onChange={(e) => setShareRecipientId(e.target.value)}
+              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-800 outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 dark:border-gray-600 dark:bg-gray-900 dark:text-white"
+            >
+              <option value="">Choose a user…</option>
+              {recipients
+                .filter(
+                  (r) =>
+                    !shareDoc.sharedWith.includes(r.id) &&
+                    r.id !== viewerIdentity?.recipientId,
+                )
+                .map((rec) => (
+                  <option key={rec.id} value={rec.id}>
+                    {rec.username} ({rec.email})
+                  </option>
+                ))}
+            </select>
+
+            {shareError && (
+              <p className="mt-2 text-sm text-red-500">{shareError}</p>
+            )}
+            {shareSuccess && (
+              <p className="mt-2 text-sm text-emerald-600 dark:text-emerald-400">
+                {shareSuccess}
+              </p>
+            )}
+
+            <div className="mt-5 flex gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  if (!sharing) {
+                    setShareDoc(null);
+                    setShareRecipientId("");
+                    setShareError(null);
+                    setShareSuccess(null);
+                  }
+                }}
+                disabled={sharing}
+                className="flex-1 rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50 disabled:opacity-60 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleShareDocument}
+                disabled={!shareRecipientId || sharing}
+                className="flex-1 rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-600 disabled:opacity-60"
+              >
+                {sharing ? "Sharing…" : "Share"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

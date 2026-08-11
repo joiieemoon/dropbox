@@ -3,9 +3,41 @@
  * with expandable rows containing page-by-page time tracking graphs.
  */
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { getRecipientPageDwell } from "../../api/analyticsApi";
+import { toggleAccess } from "../../api/documentsApi";
+import { doc, getDoc } from "firebase/firestore";
+// import { db } from "../../../firebase";
+import { db } from "../../../../firebase";
 import type { RecipientAnalytics } from "../../types";
+
+// Load access state for all recipients from Firestore
+const loadAccessState = async (
+  documentId: string,
+  recipientIds: string[],
+): Promise<Set<string>> => {
+  const disabled = new Set<string>();
+  await Promise.all(
+    recipientIds.map(async (recipientId) => {
+      try {
+        const accessRef = doc(
+          db,
+          "documents",
+          documentId,
+          "access",
+          recipientId,
+        );
+        const snap = await getDoc(accessRef);
+        if (snap.exists() && snap.data()?.active === false) {
+          disabled.add(recipientId);
+        }
+      } catch (error) {
+        console.error("Failed to load access state for", recipientId, error);
+      }
+    }),
+  );
+  return disabled;
+};
 
 interface RecipientAnalyticsTableProps {
   documentId: string;
@@ -24,37 +56,86 @@ export default function RecipientAnalyticsTable({
   pageCount,
 }: RecipientAnalyticsTableProps) {
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
-  const [pageDwellData, setPageDwellData] = useState<Map<string, PageDwellData[]>>(new Map());
+  const [pageDwellData, setPageDwellData] = useState<
+    Map<string, PageDwellData[]>
+  >(new Map());
   const [loading, setLoading] = useState(false);
+  const [disabledRecipients, setDisabledRecipients] = useState<Set<string>>(
+    new Set(),
+  );
+  const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [, setToggleError] = useState<string | null>(null);
 
-  const handleRowClick = useCallback(async (recipientId: string) => {
-    if (expandedRow === recipientId) {
-      setExpandedRow(null);
-      return;
-    }
+  // Load access state from Firestore on mount / when document/recipients change
+  useEffect(() => {
+    let cancelled = false;
+    const recipientIds = recipients.map((r) => r.recipientId);
+    loadAccessState(documentId, recipientIds).then((disabled) => {
+      if (!cancelled) {
+        setDisabledRecipients(disabled);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [documentId, recipients]);
 
-    setExpandedRow(recipientId);
-    setLoading(true);
+  const handleToggleAccess = useCallback(
+    async (recipientId: string, currentlyEnabled: boolean) => {
+      setTogglingId(recipientId);
+      setToggleError(null);
+      try {
+        await toggleAccess(documentId, recipientId, !currentlyEnabled);
+        setDisabledRecipients((prev) => {
+          const next = new Set(prev);
+          if (currentlyEnabled) {
+            next.add(recipientId);
+          } else {
+            next.delete(recipientId);
+          }
+          return next;
+        });
+      } catch (error) {
+        console.error("Failed to toggle access:", error);
+        setToggleError("Failed to update access. Please try again.");
+      } finally {
+        setTogglingId(null);
+      }
+    },
+    [documentId],
+  );
 
-    try {
-      const data = await getRecipientPageDwell(documentId, recipientId);
-      setPageDwellData(data);
-    } catch (error) {
-      console.error("Failed to fetch page dwell data:", error);
-    } finally {
-      setLoading(false);
-    }
-  }, [documentId, expandedRow]);
+  const handleRowClick = useCallback(
+    async (recipientId: string) => {
+      if (expandedRow === recipientId) {
+        setExpandedRow(null);
+        return;
+      }
+
+      setExpandedRow(recipientId);
+      setLoading(true);
+
+      try {
+        const data = await getRecipientPageDwell(documentId, recipientId);
+        setPageDwellData(data);
+      } catch (error) {
+        console.error("Failed to fetch page dwell data:", error);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [documentId, expandedRow],
+  );
 
   const getPageDwellForRecipient = (recipientId: string): PageDwellData[] => {
     const data = pageDwellData.get(recipientId) || [];
-    
+
     // Aggregate seconds by page (in case of multiple events per page from 5s flush intervals)
     const aggregated = new Map<number, number>();
-    data.forEach(d => {
+    data.forEach((d) => {
       aggregated.set(d.page, (aggregated.get(d.page) || 0) + d.seconds);
     });
-    
+
     return Array.from(aggregated.entries())
       .map(([page, seconds]) => ({ page, seconds }))
       .sort((a, b) => a.page - b.page);
@@ -68,7 +149,7 @@ export default function RecipientAnalyticsTable({
   };
 
   const getMaxSeconds = (dwellData: PageDwellData[]): number => {
-    return Math.max(...dwellData.map(d => d.seconds), 1);
+    return Math.max(...dwellData.map((d) => d.seconds), 1);
   };
 
   if (recipients.length === 0) {
@@ -89,6 +170,7 @@ export default function RecipientAnalyticsTable({
             <th className="px-6 py-3 font-medium">Completion</th>
             <th className="px-6 py-3 font-medium">Max Page</th>
             <th className="px-6 py-3 font-medium">First Access</th>
+            <th className="px-6 py-3 font-medium">Access</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
@@ -132,7 +214,9 @@ export default function RecipientAnalyticsTable({
                       <div className="h-2 w-16 rounded-full bg-gray-200 dark:bg-gray-700">
                         <div
                           className="h-2 rounded-full bg-brand-500"
-                          style={{ width: `${Math.min(recipient.completionPercent, 100)}%` }}
+                          style={{
+                            width: `${Math.min(recipient.completionPercent, 100)}%`,
+                          }}
                         />
                       </div>
                       <span className="text-xs text-gray-500 dark:text-gray-400">
@@ -158,10 +242,41 @@ export default function RecipientAnalyticsTable({
                       <span className="text-xs text-gray-400">-</span>
                     )}
                   </td>
+                  <td className="px-6 py-3">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const isDisabled = disabledRecipients.has(
+                          recipient.recipientId,
+                        );
+                        handleToggleAccess(recipient.recipientId, !isDisabled);
+                      }}
+                      disabled={togglingId === recipient.recipientId}
+                      className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500/20 disabled:opacity-60 ${
+                        disabledRecipients.has(recipient.recipientId)
+                          ? "bg-gray-300 dark:bg-gray-600"
+                          : "bg-emerald-500"
+                      }`}
+                      title={
+                        disabledRecipients.has(recipient.recipientId)
+                          ? "Click to enable access"
+                          : "Click to disable access"
+                      }
+                    >
+                      <span
+                        className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${
+                          disabledRecipients.has(recipient.recipientId)
+                            ? "translate-x-0.5"
+                            : "translate-x-[22px]"
+                        }`}
+                      />
+                    </button>
+                  </td>
                 </tr>
                 {isExpanded && (
                   <tr key={`${recipient.recipientId}-expanded`}>
-                    <td colSpan={5} className="px-6 py-4">
+                    <td colSpan={6} className="px-6 py-4">
                       <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-900">
                         <h4 className="mb-3 text-sm font-semibold text-gray-800 dark:text-white">
                           Time Spent Per Page
@@ -174,12 +289,17 @@ export default function RecipientAnalyticsTable({
                           <div className="space-y-2">
                             {Array.from({ length: pageCount }, (_, i) => {
                               const page = i + 1;
-                              const pageInfo = dwellData.find(d => d.page === page);
+                              const pageInfo = dwellData.find(
+                                (d) => d.page === page,
+                              );
                               const seconds = pageInfo?.seconds || 0;
                               const widthPercent = (seconds / maxSeconds) * 100;
 
                               return (
-                                <div key={page} className="flex items-center gap-3">
+                                <div
+                                  key={page}
+                                  className="flex items-center gap-3"
+                                >
                                   <div className="w-12 text-xs text-gray-600 dark:text-gray-400">
                                     Pg {page}
                                   </div>
