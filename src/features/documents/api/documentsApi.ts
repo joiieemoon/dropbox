@@ -20,6 +20,32 @@ import { db, auth } from "../../../firebase";
 import type { Document, Recipient, TrackingLink } from "../types";
 
 /**
+ * Get a single document by ID.
+ */
+export async function getDocumentById(id: string): Promise<Document | null> {
+  const docRef = doc(db, "documents", id);
+  const snap = await getDoc(docRef);
+  if (!snap.exists()) return null;
+  const data = snap.data();
+  return {
+    id: snap.id,
+    name: data.name ?? "",
+    url: data.dataUrl ?? data.latestDocxUrl ?? "",
+    dataUrl: data.dataUrl ?? "",
+    pageCount: data.pageCount ?? 0,
+    sizeBytes: data.sizeBytes ?? 0,
+    uploadedAt: data.createdAt?.toDate?.()?.toISOString() ?? "",
+    sharedWith: data.sharedWith ?? [],
+    uploadedBy: data.ownerId ?? "",
+    ownerId: data.ownerId ?? "",
+    docType: data.docType ?? "pdf",
+    currentVersion: data.currentVersion ?? undefined,
+    latestPdfUrl: data.latestPdfUrl ?? undefined,
+    latestDocxUrl: data.latestDocxUrl ?? undefined,
+  } as Document;
+}
+
+/**
  * List all documents owned by the current Firebase user.
  */
 export async function listDocuments(): Promise<Document[]> {
@@ -32,7 +58,7 @@ export async function listDocuments(): Promise<Document[]> {
     return {
       id: d.id,
       name: data.name ?? "",
-      url: data.dataUrl ?? "",
+      url: data.dataUrl ?? data.latestDocxUrl ?? "",
       dataUrl: data.dataUrl ?? "",
       pageCount: data.pageCount ?? 0,
       sizeBytes: data.sizeBytes ?? 0,
@@ -40,6 +66,10 @@ export async function listDocuments(): Promise<Document[]> {
       sharedWith: data.sharedWith ?? [],
       uploadedBy: data.ownerId ?? uid,
       ownerId: data.ownerId ?? uid,
+      docType: data.docType ?? "pdf",
+      currentVersion: data.currentVersion ?? undefined,
+      latestPdfUrl: data.latestPdfUrl ?? undefined,
+      latestDocxUrl: data.latestDocxUrl ?? undefined,
     } as Document;
   });
 }
@@ -111,6 +141,79 @@ function readFileAsDataUrl(file: File): Promise<string> {
     reader.onerror = () => reject(reader.error);
     reader.readAsDataURL(file);
   });
+}
+
+/**
+ * Register a newly uploaded editable Word (.docx) document.
+ * Reads the file as a base64 data URL and stores it in Firestore
+ * with docType "docx" so it can be opened/edited in the in-browser editor
+ * and shared via the existing tracking-link pipeline.
+ *
+ * NOTE: Firestore documents have a 1MB size limit. Large .docx files
+ * should be compressed or split before upload.
+ */
+export async function registerEditableDocument(
+  file: File,
+): Promise<Document> {
+  const uid = auth.currentUser?.uid;
+  if (!uid) throw new Error("You must be signed in to upload documents");
+
+  // Firestore has a 1MB document size limit. Check before converting to base64.
+  const MAX_DOCX_SIZE = 800 * 1024; // 800KB to leave room for other fields
+  if (file.size > MAX_DOCX_SIZE) {
+    throw new Error(
+      `The .docx file is too large (${(file.size / 1024).toFixed(0)}KB). ` +
+        `Firestore can only store documents up to 1MB. ` +
+        `Please use a smaller file (under 800KB) or compress it first.`,
+    );
+  }
+
+  // Convert .docx file to base64 data URL for Firestore storage.
+  const dataUrl = await readFileAsDataUrl(file);
+
+  // Create the Firestore document.
+  const docRef = doc(collection(db, "documents"));
+  await setDoc(docRef, {
+    name: file.name,
+    ownerId: uid,
+    docType: "docx",
+    currentVersion: 1,
+    dataUrl,
+    latestDocxUrl: dataUrl,
+    latestPdfUrl: "",
+    pageCount: 1,
+    sizeBytes: file.size,
+    sharedWith: [],
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+
+  // Automatically grant the owner access to the document.
+  const accessRef = doc(db, "documents", docRef.id, "access", uid);
+  await setDoc(accessRef, {
+    userId: uid,
+    role: "owner",
+    grantedBy: uid,
+    grantedAt: serverTimestamp(),
+    active: true,
+  });
+
+  return {
+    id: docRef.id,
+    name: file.name,
+    url: dataUrl,
+    dataUrl,
+    pageCount: 1,
+    sizeBytes: file.size,
+    uploadedAt: new Date().toISOString(),
+    sharedWith: [],
+    uploadedBy: uid,
+    ownerId: uid,
+    docType: "docx",
+    currentVersion: 1,
+    latestDocxUrl: dataUrl,
+    latestPdfUrl: "",
+  };
 }
 
 /**

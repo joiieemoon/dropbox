@@ -32,6 +32,12 @@ const SenderDashboard = lazy(
   const SecureViewer = lazy(
     () => import("./features/documents/viewer/components/SecureViewer"),
   );
+  const DocxViewerPage = lazy(
+    () => import("./features/documents/sender/DocxViewerPage"),
+  );
+  const DocxDocumentViewer = lazy(
+    () => import("./features/documents/sender/DocxDocumentViewer"),
+  );
 
 export const router = createBrowserRouter([
   {
@@ -58,6 +64,8 @@ export const router = createBrowserRouter([
       { index: true, element: <Navigate to="/documents" replace /> },
       { path: "dashboard", element: <Navigate to="/documents" replace /> },
       { path: "documents", element: <SenderDashboard /> },
+      { path: "docx-viewer", element: <DocxViewerPage /> },
+      { path: "docx-viewer/:id", element: <DocxDocumentViewer /> },
 
       // Profile
       { path: "profile", element: <UserProfiles /> },

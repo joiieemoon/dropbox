@@ -21,6 +21,36 @@ export interface Document {
   uploadedBy?: string;
   /** Firebase UID of the document owner. */
   ownerId?: string;
+  /**
+   * Document type: "pdf" for legacy PDF uploads (default),
+   * "docx" for editable Word documents created via the in-browser editor.
+   */
+  docType?: "pdf" | "docx";
+  /** Latest version number saved for editable documents. */
+  currentVersion?: number;
+  /** Cloud Storage URL to the latest exported PDF (used by the pdf.js viewer). */
+  latestPdfUrl?: string;
+  /** Cloud Storage URL to the latest exported DOCX. */
+  latestDocxUrl?: string;
+}
+
+/** A single version snapshot of an editable (.docx) document. */
+export interface DocumentVersion {
+  id: string;
+  documentId: string;
+  versionNumber: number;
+  /** Email of the author who saved this version. */
+  author: string;
+  /** Human-readable change summary. */
+  changeSummary: string;
+  /** ISO timestamp when the version was saved. */
+  timestamp: string;
+  /** Syncfusion SFDT JSON string capturing the full editor state. */
+  sfdtContent: string;
+  /** Cloud Storage URL to the exported PDF for this version. */
+  pdfUrl: string;
+  /** Cloud Storage URL to the exported DOCX for this version. */
+  docxUrl: string;
 }
 
 /** A recipient who can be granted access to a document. */

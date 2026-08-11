@@ -56,4 +56,4 @@ service cloud.firestore {
         request.resource.data.createdBy == request.auth.uid;
     }
   }
-}
+} 

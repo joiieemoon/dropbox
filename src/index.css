@@ -790,3 +790,38 @@ span.flatpickr-weekday,
 .simplebar-scrollbar.simplebar-visible:before {
   @apply opacity-100;
 }
+
+/* DOCX Viewer - Single page view like PDF viewer */
+.docx-viewer-container {
+  height: 100%;
+  overflow: hidden !important;
+}
+
+.docx-viewer-container .e-de-scroller {
+  overflow: hidden !important;
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+
+.docx-viewer-container .e-de-scroller::-webkit-scrollbar {
+  display: none !important;
+}
+
+.docx-viewer-container .e-de-viewer-container {
+  overflow: hidden !important;
+}
+
+.docx-viewer-container .e-de-page {
+  margin: 0 auto !important;
+}
+
+/* Hide scrollbar for all browser engines */
+.docx-viewer-container [style*="overflow: auto"] {
+  overflow: hidden !important;
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+
+.docx-viewer-container [style*="overflow: auto"]::-webkit-scrollbar {
+  display: none !important;
+}

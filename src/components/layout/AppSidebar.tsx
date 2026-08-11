@@ -9,6 +9,7 @@ import {
   PieChartIcon,
   UserCircleIcon,
   FolderIcon,
+  DocsIcon,
 } from "../../icons";
 import { useSidebar } from "../../context/SidebarContext";
 
@@ -33,8 +34,13 @@ const navItems: NavItem[] = [
   // },
   {
     icon: <FileIcon />,
-    name: "Documents",
+    name: "Pdf Documents",
     path: "/documents",
+  },
+  {
+    icon: <DocsIcon />,
+    name: "Word Documents",
+    path: "/docx-viewer",
   },
   {
     icon: <FolderIcon />,
