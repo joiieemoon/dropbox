@@ -807,20 +807,20 @@ span.flatpickr-weekday,
   display: none !important;
 }
 
-.docx-viewer-container .e-de-viewer-container {
+/* .docx-viewer-container .e-de-viewer-container {
   overflow: hidden !important;
-}
+} */
 
 .docx-viewer-container .e-de-page {
   margin: 0 auto !important;
 }
 
 /* Hide scrollbar for all browser engines */
-.docx-viewer-container [style*="overflow: auto"] {
+/* .docx-viewer-container [style*="overflow: auto"] {
   overflow: hidden !important;
   scrollbar-width: none !important;
   -ms-overflow-style: none !important;
-}
+} */
 
 .docx-viewer-container [style*="overflow: auto"]::-webkit-scrollbar {
   display: none !important;

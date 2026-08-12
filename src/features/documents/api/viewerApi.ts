@@ -63,6 +63,10 @@ export async function verifyDirectAccess(
     sharedWith: data.sharedWith ?? [],
     uploadedBy: data.ownerId ?? "",
     ownerId: data.ownerId ?? "",
+    docType: data.docType ?? "pdf",
+    currentVersion: data.currentVersion ?? undefined,
+    latestPdfUrl: data.latestPdfUrl ?? undefined,
+    latestDocxUrl: data.latestDocxUrl ?? undefined,
   };
 
   return { valid: true, emailKnown: true, document, recipientEmail: identity.email };
@@ -144,6 +148,10 @@ export async function verifyToken(
     sharedWith: data.sharedWith ?? [],
     uploadedBy: data.ownerId ?? "",
     ownerId: data.ownerId ?? "",
+    docType: data.docType ?? "pdf",
+    currentVersion: data.currentVersion ?? undefined,
+    latestPdfUrl: data.latestPdfUrl ?? undefined,
+    latestDocxUrl: data.latestDocxUrl ?? undefined,
   };
 
   return { valid: true, emailKnown: true, document, recipientEmail: identity.email };

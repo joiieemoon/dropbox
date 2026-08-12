@@ -39,9 +39,7 @@ export default function ShareDocumentPanel({
   // and exclude the current user (owner) from the dropdown.
   const availableRecipients = useMemo(() => {
     return recipients.filter(
-      (r) =>
-        !document.sharedWith.includes(r.id) &&
-        r.id !== currentRecipientId,
+      (r) => !document.sharedWith.includes(r.id) && r.id !== currentRecipientId,
     );
   }, [recipients, document.sharedWith, currentRecipientId]);
 
@@ -65,9 +63,7 @@ export default function ShareDocumentPanel({
       onDocumentUpdated(updatedDoc);
       onLinkGenerated(link);
       setGeneratedLink(link);
-      setShareSuccess(
-        `Document shared successfully! Tracking link generated.`,
-      );
+      setShareSuccess(`Document shared successfully! Tracking link generated.`);
       setSelectedRecipientId("");
     } catch {
       setShareError("Failed to share the document. Please try again.");
@@ -161,22 +157,22 @@ export default function ShareDocumentPanel({
                 className="flex items-center justify-between rounded-lg border border-gray-200 bg-white px-3 py-2 dark:border-gray-700 dark:bg-gray-900"
               >
                 <div className="flex items-center gap-2.5">
-                   <div className="flex h-7 w-7 items-center justify-center rounded-full bg-brand-100 text-xs font-semibold text-brand-700 dark:bg-brand-500/20 dark:text-brand-300">
-                     {rec.username
-                       .split(" ")
-                       .map((n) => n[0])
-                       .slice(0, 2)
-                       .join("")
-                       .toUpperCase()}
-                   </div>
-                   <div>
-                     <p className="text-sm font-medium text-gray-800 dark:text-white">
-                       {rec.username}
-                     </p>
-                     <p className="text-xs text-gray-500 dark:text-gray-400">
-                       {rec.email}
-                     </p>
-                   </div>
+                  <div className="flex h-7 w-7 items-center justify-center rounded-full bg-brand-100 text-xs font-semibold text-brand-700 dark:bg-brand-500/20 dark:text-brand-300">
+                    {rec.username
+                      .split(" ")
+                      .map((n) => n[0])
+                      .slice(0, 2)
+                      .join("")
+                      .toUpperCase()}
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-gray-800 dark:text-white">
+                      {rec.username}
+                    </p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      {rec.email}
+                    </p>
+                  </div>
                 </div>
                 <span className="flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400">
                   <svg

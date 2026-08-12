@@ -2,11 +2,16 @@
  * DocxViewer - read-only in-browser viewer for .docx documents
  * built on Syncfusion's DocumentEditorContainerComponent.
  *
- * Renders a .docx File (or SFDT JSON string) in a read-only pane so the
- * existing PDF-based recipient tracking/analytics flow is NOT touched.
+ * Page navigation:
+ *   - Current page  -> Syncfusion viewChange.startPage
+ *   - Total pages   -> Syncfusion documentEditor.pageCount
+ *
+ * This keeps the custom header synchronized with Syncfusion's
+ * own pagination engine.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
+
 import {
   DocumentEditorContainerComponent,
   Inject,
@@ -16,22 +21,44 @@ import {
   Editor,
   Selection,
 } from "@syncfusion/ej2-react-documenteditor";
+
 import type { DocumentEditorContainerComponent as ContainerType } from "@syncfusion/ej2-react-documenteditor";
 
-/** Syncfusion demo service used for .docx import/export during development. */
+import type { ViewChangeEventArgs } from "@syncfusion/ej2-documenteditor";
+
+/**
+ * Syncfusion demo service used for .docx import/export.
+ */
 export const EJ2_SERVICES_URL =
-  // "https://ej2services.syncfusion.com/production/web-services/api/documenteditor/";
   "https://document.syncfusion.com/web-services/docx-editor/api/documenteditor/";
 
 interface DocxViewerProps {
-  /** A .docx File to open, OR an SFDT JSON string to render. */
+  /**
+   * A .docx File, data URL, SFDT JSON string, or URL.
+   */
   source: File | string | null;
-  /** Optional document title shown in the header. */
+
+  /**
+   * Optional document title.
+   */
   title?: string;
-  /** Total page count for navigation (optional, defaults to 1). */
+
+  /**
+   * Optional fallback page count.
+   *
+   * Usually this can be omitted.
+   */
   pageCount?: number;
-  /** Callback when the current page changes (for tracking). */
+
+  /**
+   * Callback when current page changes.
+   */
   onPageChange?: (page: number) => void;
+  onPageCountChange?: (pageCount: number) => void;
+  /**
+   * Optional viewer height (CSS value). Defaults to "80vh".
+   */
+  height?: string;
 }
 
 export default function DocxViewer({
@@ -39,259 +66,489 @@ export default function DocxViewer({
   title,
   pageCount = 1,
   onPageChange,
+  onPageCountChange,
+  height = "80vh",
 }: DocxViewerProps) {
   const containerRef = useRef<ContainerType | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [docName, setDocName] = useState<string>(title ?? "");
-  const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(pageCount);
 
-  // When source changes, save it so it can be loaded once the editor is ready.
+  /**
+   * Latest source.
+   */
   const pendingSource = useRef<File | string | null>(source);
 
-  /** Convert a base64 data URL to a File object. */
-  function dataUrlToFile(dataUrl: string, filename: string): File {
-    const [header, base64] = dataUrl.split(",");
-    const mimeMatch = header.match(/data:([^;]+)/);
-    const mimeType = mimeMatch ? mimeMatch[1] : "application/octet-stream";
-    const binary = atob(base64);
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) {
-      bytes[i] = binary.charCodeAt(i);
-    }
-    return new File([bytes], filename, { type: mimeType });
-  }
+  /**
+   * Prevent duplicate initial loading.
+   */
+  const createdRef = useRef(false);
 
+  /**
+   * Current page ref.
+   */
+  const currentPageRef = useRef(1);
 
-  /** Loads the given source into the read-only editor. */
-  const loadIntoEditor = useCallback(
-    async (src: File | string, name: string) => {
-      const container = containerRef.current;
-      if (!container) {
-        console.log("[DocxViewer] loadIntoEditor: container is null");
-        return;
-      }
+  /**
+   * Total page ref.
+   *
+   * Keeping this in a ref avoids stale values inside callbacks.
+   */
+  const totalPagesRef = useRef(Math.max(1, pageCount));
 
-      const editor = container.documentEditor;
-      // The editor must be fully initialized before opening a document.
-      if (!editor) {
-        console.log("[DocxViewer] loadIntoEditor: editor is null/undefined");
-        return;
-      }
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-      console.log("[DocxViewer] loadIntoEditor: editor ready", {
-        serviceUrl: container.serviceUrl,
-        isReadOnly: editor.isReadOnly,
-        hasDocumentHelper: !!editor.documentHelper,
-      });
+  const [docName, setDocName] = useState(title ?? "");
 
-      // Set to read-only (disabled editing).
-      editor.isReadOnly = true;
-      editor.enableTrackChanges = false;
+  const [currentPage, setCurrentPage] = useState(1);
 
-      setLoading(true);
-      setError(null);
+  const [totalPages, setTotalPages] = useState(Math.max(1, pageCount));
 
-      try {
-        if (typeof src === "string") {
-          if (src.startsWith("data:")) {
-            // Base64 data URL -> convert to File and open via Syncfusion service.
-            const file = dataUrlToFile(src, name);
-            console.log("[DocxViewer] Calling openAsync(file from dataUrl)", {
-              name: file.name,
-              size: file.size,
-              type: file.type,
-            });
-            await editor.openAsync(file);
-            console.log("[DocxViewer] openAsync(file from dataUrl) resolved");
-            setDocName(name);
-          } else {
-            // SFDT JSON string -> open directly (async).
-            console.log(
-              "[DocxViewer] Calling openAsync(string) length=",
-              src.length,
-            );
-            await editor.openAsync(src);
-            console.log("[DocxViewer] openAsync(string) resolved");
-            setDocName(name);
-          }
-        } else {
-          // File (.docx) -> openAsync converts via the Syncfusion service.
-          console.log("[DocxViewer] Calling openAsync(file)", {
-            name: src.name,
-            size: src.size,
-            type: src.type,
-          });
-          await editor.openAsync(src);
-          console.log("[DocxViewer] openAsync(file) resolved");
-          setDocName(name ?? src.name);
-        }
+  /**
+   * Keep onPageCountChange in a ref to avoid stale closures
+   * and prevent unnecessary re-renders / flickering.
+   */
+  const onPageCountChangeRef = useRef(onPageCountChange);
+  onPageCountChangeRef.current = onPageCountChange;
 
-        // After load, inspect the actual SFDT content to confirm text is present.
-        try {
-          const sfdt = editor.serialize();
-          const hasContent =
-            !!sfdt && sfdt.length > 10 && !sfdt.includes('"sections":[]');
-          console.log("[DocxViewer] serialize() after load:", {
-            length: sfdt?.length,
-            hasContent,
-            preview: sfdt?.slice(0, 120),
-          });
-        } catch (serializeErr) {
-          console.log("[DocxViewer] serialize() threw:", serializeErr);
-        }
-
-        // Update total pages from the actual editor state with retry logic
-        // The editor needs time to process the document and calculate page count
-        const checkPageCount = (attempt: number = 1) => {
-          const editor = containerRef.current?.documentEditor;
-          console.log(`[DocxViewer] Checking pageCount (attempt ${attempt}):`, {
-            hasEditor: !!editor,
-            pageCount: editor?.pageCount,
-            totalPages,
-          });
-
-          if (editor && editor.pageCount && editor.pageCount > 0) {
-            setTotalPages(editor.pageCount);
-            console.log(
-              `[DocxViewer] ✓ Page count updated: ${editor.pageCount} pages (after ${attempt} attempts)`,
-            );
-          } else if (attempt < 10) {
-            // Retry up to 10 times with 500ms delay
-            console.log(
-              `[DocxViewer] Page count not ready yet, retrying in 500ms... (attempt ${attempt}/10)`,
-            );
-            setTimeout(() => checkPageCount(attempt + 1), 500);
-          } else {
-            console.log(
-              `[DocxViewer] ⚠ Page count still not available after ${attempt} attempts, using fallback: ${pageCount}`,
-            );
-            setTotalPages(pageCount);
-          }
-        };
-
-        setTimeout(() => checkPageCount(1), 2500);
-
-        // Inspect the DOM canvas state to see if the page painted.
-        setTimeout(() => {
-          const viewContainer = container.element?.querySelector(
-            ".e-de-scroller, .e-de-viewer-container, canvas",
-          );
-          const canvases = container.element?.querySelectorAll("canvas");
-          console.log("[DocxViewer] DOM after load:", {
-            scrollerFound: !!container.element?.querySelector(".e-de-scroller"),
-            canvasCount: canvases?.length ?? 0,
-            firstCanvas: canvases?.[0]
-              ? {
-                  width: canvases[0].width,
-                  height: canvases[0].height,
-                }
-              : null,
-            editorHtmlLength: container.element?.innerHTML?.length ?? 0,
-          });
-          if (viewContainer) {
-            console.log("[DocxViewer] view container rect:", {
-              clientHeight: (viewContainer as HTMLElement).clientHeight,
-              scrollHeight: (viewContainer as HTMLElement).scrollHeight,
-              offsetHeight: (viewContainer as HTMLElement).offsetHeight,
-            });
-          }
-        }, 300);
-
-        setLoading(false);
-      } catch (e) {
-        console.error("[DocxViewer] Failed to open document:", e);
-        setError(
-          "Could not open this document. The Syncfusion document service may be unavailable.",
-        );
-        setLoading(false);
-      }
-    },
-    [],
-  );
-
-  // Store the latest source for the created handler.
+  /**
+   * Keep source ref updated.
+   */
   useEffect(() => {
     pendingSource.current = source;
   }, [source]);
 
-  // If the editor is already mounted, load directly whenever source changes.
-  useEffect(() => {
-    if (!containerRef.current || !source) return;
-    setCurrentPage(1);
-    setTotalPages(pageCount);
-    void loadIntoEditor(source, title ?? "");
-  }, [source, title, pageCount, loadIntoEditor]);
+  /**
+   * Convert a base64 data URL to a File.
+   */
+  const dataUrlToFile = useCallback(
+    (dataUrl: string, filename: string): File => {
+      const [header, base64] = dataUrl.split(",");
 
-  // Navigate to a specific page in the document.
-  const goToPage = useCallback(
-    (page: number) => {
-      const container = containerRef.current;
-      const editor = container?.documentEditor;
-      if (!editor) return;
+      const mimeMatch = header?.match(/data:([^;]+)/);
 
-      const total = editor.pageCount || pageCount;
-      const target = Math.max(1, Math.min(page, total));
-      // scrollToPage uses 0-based index
-      editor.scrollToPage(target - 1);
-      setCurrentPage(target);
-      onPageChange?.(target);
+      const mimeType = mimeMatch ? mimeMatch[1] : "application/octet-stream";
+
+      const binary = atob(base64);
+
+      const bytes = new Uint8Array(binary.length);
+
+      for (let i = 0; i < binary.length; i++) {
+        bytes[i] = binary.charCodeAt(i);
+      }
+
+      return new File([bytes], filename, {
+        type: mimeType,
+      });
     },
-    [pageCount, onPageChange],
+    [],
   );
 
-  const goPrev = useCallback(() => {
-    if (currentPage > 1) goToPage(currentPage - 1);
-  }, [currentPage, goToPage]);
-
-  const goNext = useCallback(() => {
+  /**
+   * ------------------------------------------------------------
+   * SYNC TOTAL PAGE COUNT
+   * ------------------------------------------------------------
+   *
+   * Syncfusion's DocumentEditor exposes pageCount as the total
+   * number of pages.
+   *
+   * We read it only from the actual DocumentEditor instance.
+   */
+  const syncTotalPages = useCallback(() => {
     const editor = containerRef.current?.documentEditor;
-    const total = editor?.pageCount || pageCount;
-    if (currentPage < total) goToPage(currentPage + 1);
-  }, [currentPage, pageCount, goToPage]);
 
-  const handleCreated = useCallback(() => {
-    const container = containerRef.current;
-    const editor = container?.documentEditor;
-    console.log("[DocxViewer] created event fired", {
-      hasContainer: !!container,
-      hasEditor: !!editor,
-      hasDocumentHelper: !!editor?.documentHelper,
-    });
-
-    if (editor) {
-      // Keep the editor in read-only mode once the container is ready.
-      editor.isReadOnly = true;
-      editor.enableTrackChanges = false;
+    if (!editor) {
+      return;
     }
 
-    // Load any source that was set before the editor finished initializing.
+    const count = editor.pageCount;
+
+    /**
+     * Only accept a valid positive page count.
+     */
+    if (typeof count !== "number" || !Number.isFinite(count) || count <= 0) {
+      return;
+    }
+
+    /**
+     * Don't update React unnecessarily.
+     */
+    if (count === totalPagesRef.current) {
+      return;
+    }
+
+    /**
+     * IMPORTANT:
+     *
+     * Never allow the fallback "1" to replace a real count.
+     */
+    totalPagesRef.current = count;
+    setTotalPages(count);
+
+    /**
+     * Notify parent of the real page count.
+     */
+    onPageCountChangeRef.current?.(count);
+  }, []);
+
+  /**
+   * ------------------------------------------------------------
+   * RETRY TOTAL PAGE COUNT
+   * ------------------------------------------------------------
+   *
+   * DOCX pagination/layout can finish asynchronously.
+   *
+   * Therefore we check several times after loading.
+   */
+  const refreshTotalPageCount = useCallback(() => {
+    const delays = [0, 100, 250, 500, 800, 1200, 1800, 2500, 3500];
+
+    delays.forEach((delay) => {
+      window.setTimeout(() => {
+        syncTotalPages();
+      }, delay);
+    });
+  }, [syncTotalPages]);
+
+  /**
+   * ------------------------------------------------------------
+   * CURRENT PAGE
+   * ------------------------------------------------------------
+   *
+   * Syncfusion calls this whenever the document viewport changes.
+   *
+   * startPage is what we use for the header because this is the
+   * page at the beginning of the current viewport.
+   */
+  const handleViewChange = useCallback(
+    (args: ViewChangeEventArgs) => {
+      /**
+       * First update total page count.
+       *
+       * This is important because pageCount may become available
+       * when Syncfusion performs its first layout.
+       */
+      syncTotalPages();
+
+      const page = args.startPage;
+
+      if (!page || page < 1 || !Number.isFinite(page)) {
+        return;
+      }
+
+      /**
+       * Avoid duplicate React updates.
+       */
+      if (page === currentPageRef.current) {
+        return;
+      }
+
+      currentPageRef.current = page;
+
+      setCurrentPage(page);
+
+      onPageChange?.(page);
+    },
+    [syncTotalPages, onPageChange],
+  );
+
+  /**
+   * ------------------------------------------------------------
+   * DOCUMENT CHANGE
+   * ------------------------------------------------------------
+   *
+   * This fires when the document changes/loads.
+   *
+   * It is an additional reliable point to retrieve pageCount.
+   */
+  const handleDocumentChange = useCallback(() => {
+    /**
+     * Give Syncfusion a chance to finish layout,
+     * then repeatedly check pageCount.
+     */
+    refreshTotalPageCount();
+
+    /**
+     * Reset current page to 1 for a newly loaded document.
+     */
+    currentPageRef.current = 1;
+    setCurrentPage(1);
+  }, [refreshTotalPageCount]);
+
+  /**
+   * ------------------------------------------------------------
+   * LOAD DOCUMENT
+   * ------------------------------------------------------------
+   */
+  const loadIntoEditor = useCallback(
+    async (src: File | string, name: string) => {
+      const container = containerRef.current;
+
+      if (!container) {
+        return;
+      }
+
+      const editor = container.documentEditor;
+
+      if (!editor) {
+        return;
+      }
+
+      setLoading(true);
+      setError(null);
+
+      /**
+       * Reset page information for the new document.
+       */
+      currentPageRef.current = 1;
+      setCurrentPage(1);
+
+      /**
+       * Only use the supplied pageCount as a fallback.
+       *
+       * Syncfusion will replace it with the actual count.
+       */
+      const fallbackCount = Math.max(1, pageCount);
+
+      totalPagesRef.current = fallbackCount;
+
+      setTotalPages(fallbackCount);
+
+      /**
+       * Read-only mode.
+       */
+      editor.isReadOnly = true;
+      editor.enableTrackChanges = false;
+
+      try {
+        /**
+         * ------------------------------------------------------
+         * OPEN DOCUMENT
+         * ------------------------------------------------------
+         */
+        if (typeof src === "string") {
+          if (src.startsWith("data:")) {
+            const file = dataUrlToFile(src, name || "document.docx");
+
+            await editor.openAsync(file);
+
+            setDocName(name || "Document");
+          } else {
+            await editor.openAsync(src);
+
+            setDocName(name || "Document");
+          }
+        } else {
+          await editor.openAsync(src);
+
+          setDocName(name || src.name || "Document");
+        }
+
+        /**
+         * Re-apply read-only after opening.
+         */
+        editor.isReadOnly = true;
+        editor.enableTrackChanges = false;
+
+        /**
+         * Syncfusion has now received the document.
+         *
+         * Pagination itself can still happen asynchronously,
+         * so don't assume pageCount is ready immediately.
+         */
+        refreshTotalPageCount();
+
+        /**
+         * Resize after the document is rendered.
+         */
+        window.setTimeout(() => {
+          containerRef.current?.resize?.();
+
+          containerRef.current?.documentEditor?.resize?.();
+
+          refreshTotalPageCount();
+        }, 500);
+
+        window.setTimeout(() => {
+          containerRef.current?.documentEditor?.resize?.();
+
+          refreshTotalPageCount();
+        }, 1500);
+
+        window.setTimeout(() => {
+          refreshTotalPageCount();
+        }, 3000);
+
+        setLoading(false);
+      } catch (e) {
+        console.error("[DocxViewer] Failed to open document:", e);
+
+        setError(
+          "Could not open this document. The Syncfusion document service may be unavailable.",
+        );
+
+        setLoading(false);
+      }
+    },
+    [dataUrlToFile, pageCount, refreshTotalPageCount],
+  );
+
+  /**
+   * ------------------------------------------------------------
+   * SYNCFUSION CREATED
+   * ------------------------------------------------------------
+   */
+  const handleCreated = useCallback(() => {
+    const container = containerRef.current;
+
+    const editor = container?.documentEditor;
+
+    if (!editor) {
+      return;
+    }
+
+    /**
+     * Configure read-only mode.
+     */
+    editor.isReadOnly = true;
+    editor.enableTrackChanges = false;
+
+    /**
+     * IMPORTANT:
+     *
+     * Current page comes directly from Syncfusion.
+     */
+    editor.viewChange = handleViewChange;
+
+    /**
+     * IMPORTANT:
+     *
+     * Document loading/layout changes trigger
+     * another page-count synchronization.
+     */
+    editor.documentChange = handleDocumentChange;
+
+    /**
+     * Prevent duplicate initial loading.
+     */
+    if (createdRef.current) {
+      return;
+    }
+
+    createdRef.current = true;
+
+    /**
+     * Load initial document.
+     */
     const src = pendingSource.current;
+
     if (src) {
       void loadIntoEditor(src, title ?? "");
     }
 
-    // Force a layout so the page canvas paints (fixes blank-white content).
+    /**
+     * Initial layout.
+     */
     window.setTimeout(() => {
-      console.log("[DocxViewer] calling resize()");
       container?.resize?.();
-      editor?.resize?.();
+
+      editor.resize?.();
+
+      refreshTotalPageCount();
     }, 100);
-  }, [loadIntoEditor, title]);
+  }, [
+    handleViewChange,
+    handleDocumentChange,
+    loadIntoEditor,
+    title,
+    refreshTotalPageCount,
+  ]);
 
-  // Log when the component mounts/unmounts for orientation.
+  /**
+   * ------------------------------------------------------------
+   * SOURCE CHANGED
+   * ------------------------------------------------------------
+   */
   useEffect(() => {
-    console.log(
-      "[DocxViewer] component mounted, source=",
-      source ? "set" : "null",
-    );
-    return () => {
-      console.log("[DocxViewer] component unmounting");
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    if (!createdRef.current) {
+      return;
+    }
 
+    if (!source) {
+      return;
+    }
+
+    void loadIntoEditor(source, title ?? "");
+  }, [source, title, loadIntoEditor]);
+
+  /**
+   * ------------------------------------------------------------
+   * GO TO PAGE
+   * ------------------------------------------------------------
+   *
+   * Do not manually set currentPage here.
+   *
+   * Syncfusion's viewChange event will do it.
+   */
+  const goToPage = useCallback(
+    (page: number) => {
+      const editor = containerRef.current?.documentEditor;
+
+      if (!editor) {
+        return;
+      }
+
+      /**
+       * Always get the latest page count
+       * directly from Syncfusion.
+       */
+      const actualTotal =
+        editor.pageCount || totalPagesRef.current || pageCount;
+
+      const target = Math.max(1, Math.min(page, actualTotal));
+
+      editor.scrollToPage(target - 1);
+    },
+    [pageCount],
+  );
+
+  /**
+   * ------------------------------------------------------------
+   * PREVIOUS
+   * ------------------------------------------------------------
+   */
+  const goPrev = useCallback(() => {
+    if (currentPage <= 1) {
+      return;
+    }
+
+    goToPage(currentPage - 1);
+  }, [currentPage, goToPage]);
+
+  /**
+   * ------------------------------------------------------------
+   * NEXT
+   * ------------------------------------------------------------
+   */
+  const goNext = useCallback(() => {
+    const editor = containerRef.current?.documentEditor;
+
+    /**
+     * Read latest page count directly
+     * from Syncfusion.
+     */
+    const actualTotal = editor?.pageCount || totalPagesRef.current || pageCount;
+
+    if (currentPage >= actualTotal) {
+      return;
+    }
+
+    goToPage(currentPage + 1);
+  }, [currentPage, pageCount, goToPage]);
+
+  /**
+   * ------------------------------------------------------------
+   * ERROR UI
+   * ------------------------------------------------------------
+   */
   if (error) {
     return (
       <div className="flex h-[70vh] items-center justify-center rounded-xl border border-red-200 bg-red-50 p-8 text-center dark:border-red-800 dark:bg-red-900/20">
@@ -299,15 +556,20 @@ export default function DocxViewer({
           <p className="text-sm font-medium text-red-700 dark:text-red-300">
             {error}
           </p>
+
           <p className="mt-1 text-xs text-red-500 dark:text-red-400">
-            The Syncfusion document service ({EJ2_SERVICES_URL}) must be
-            reachable.
+            The Syncfusion document service must be reachable.
           </p>
         </div>
       </div>
     );
   }
 
+  /**
+   * ------------------------------------------------------------
+   * MAIN UI
+   * ------------------------------------------------------------
+   */
   return (
     <div className="rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
       <DocxViewerHeader
@@ -318,18 +580,26 @@ export default function DocxViewer({
         onPrev={goPrev}
         onNext={goNext}
       />
-      <div className="relative" style={{ height: "70vh" }}>
+
+      <div
+        className="relative"
+        style={{
+          height,
+        }}
+      >
         {loading && (
           <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/70 dark:bg-gray-900/70">
             <div className="flex items-center gap-3">
               <div className="h-6 w-6 animate-spin rounded-full border-2 border-brand-500 border-t-transparent" />
+
               <span className="text-sm text-gray-600 dark:text-gray-300">
                 Opening document…
               </span>
             </div>
           </div>
         )}
-        <div className="docx-viewer-container">
+
+        <div className="docx-viewer-container h-full">
           <DocumentEditorContainerComponent
             ref={containerRef}
             height="100%"
@@ -344,9 +614,9 @@ export default function DocxViewer({
             }}
             created={handleCreated}
           >
-          <Inject
-            services={[Toolbar, SfdtExport, WordExport, Editor, Selection]}
-          />
+            <Inject
+              services={[Toolbar, SfdtExport, WordExport, Editor, Selection]}
+            />
           </DocumentEditorContainerComponent>
         </div>
       </div>
@@ -354,6 +624,11 @@ export default function DocxViewer({
   );
 }
 
+/**
+ * ============================================================
+ * HEADER
+ * ============================================================
+ */
 function DocxViewerHeader({
   name,
   loading,
@@ -371,6 +646,7 @@ function DocxViewerHeader({
 }) {
   return (
     <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3 dark:border-gray-700">
+      {/* Document name */}
       <div className="flex items-center gap-2">
         <svg
           className="h-5 w-5 text-brand-600 dark:text-brand-400"
@@ -385,31 +661,47 @@ function DocxViewerHeader({
             d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"
           />
         </svg>
+
         <span className="text-sm font-semibold text-gray-800 dark:text-white">
           {name || "Document"}
         </span>
       </div>
+
+      {/* Right controls */}
       <div className="flex items-center gap-3">
+        {/* Read-only */}
         <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400">
           <span className={loading ? "animate-pulse" : ""}>
             {loading ? "Loading…" : "Read-only"}
           </span>
         </span>
+
+        {/* Navigation */}
         <div className="flex items-center gap-1">
           <button
             type="button"
             onClick={onPrev}
+            disabled={currentPage <= 1}
             className="rounded-lg border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-700 transition hover:bg-gray-50 disabled:opacity-40 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
             aria-label="Previous page"
           >
             ← Prev
           </button>
+
+          {/* 
+            This is now:
+
+              currentPage = viewChange.startPage
+              totalPages  = documentEditor.pageCount
+          */}
           <span className="rounded-lg bg-gray-100 px-2.5 py-1 text-xs font-medium tabular-nums text-gray-600 dark:bg-gray-800 dark:text-gray-300">
             {currentPage} / {totalPages}
           </span>
+
           <button
             type="button"
             onClick={onNext}
+            disabled={currentPage >= totalPages}
             className="rounded-lg border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-700 transition hover:bg-gray-50 disabled:opacity-40 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
             aria-label="Next page"
           >

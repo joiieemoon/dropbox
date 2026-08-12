@@ -154,6 +154,7 @@ function readFileAsDataUrl(file: File): Promise<string> {
  */
 export async function registerEditableDocument(
   file: File,
+  pageCount = 1,
 ): Promise<Document> {
   const uid = auth.currentUser?.uid;
   if (!uid) throw new Error("You must be signed in to upload documents");
@@ -181,7 +182,7 @@ export async function registerEditableDocument(
     dataUrl,
     latestDocxUrl: dataUrl,
     latestPdfUrl: "",
-    pageCount: 1,
+    pageCount,
     sizeBytes: file.size,
     sharedWith: [],
     createdAt: serverTimestamp(),
@@ -203,7 +204,7 @@ export async function registerEditableDocument(
     name: file.name,
     url: dataUrl,
     dataUrl,
-    pageCount: 1,
+    pageCount,
     sizeBytes: file.size,
     uploadedAt: new Date().toISOString(),
     sharedWith: [],
@@ -214,6 +215,29 @@ export async function registerEditableDocument(
     latestDocxUrl: dataUrl,
     latestPdfUrl: "",
   };
+}
+
+/**
+ * Update the page count for an existing document.
+ * Used when Syncfusion detects the real page count after loading.
+ */
+export async function updateDocumentPageCount(
+  documentId: string,
+  pageCount: number,
+): Promise<void> {
+  const uid = auth.currentUser?.uid;
+  if (!uid) throw new Error("You must be signed in to update documents");
+
+  const docRef = doc(db, "documents", documentId);
+  const docSnap = await getDoc(docRef);
+  if (!docSnap.exists()) throw new Error("Document not found");
+  if (docSnap.data()?.ownerId !== uid)
+    throw new Error("You can only update your own documents");
+
+  await updateDoc(docRef, {
+    pageCount,
+    updatedAt: serverTimestamp(),
+  });
 }
 
 /**
@@ -446,6 +470,10 @@ export async function listSharedDocuments(): Promise<Document[]> {
           sharedWith: data.sharedWith ?? [],
           uploadedBy: data.ownerId ?? "",
           ownerId: data.ownerId ?? "",
+          docType: data.docType ?? "pdf",
+          currentVersion: data.currentVersion ?? undefined,
+          latestPdfUrl: data.latestPdfUrl ?? undefined,
+          latestDocxUrl: data.latestDocxUrl ?? undefined,
         } as Document);
       }
     }

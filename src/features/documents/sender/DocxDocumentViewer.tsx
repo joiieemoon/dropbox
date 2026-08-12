@@ -3,10 +3,14 @@
  * Reads the document from Firestore by ID and renders it in the DocxViewer.
  */
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import DocxViewer from "./components/DocxViewer";
 import { getDocumentById } from "../api/documentsApi";
+import { BeaconQueue } from "../viewer/telemetry/BeaconQueue";
+import { useBeaconDispatcher } from "../viewer/telemetry/useBeaconDispatcher";
+import { usePageTracking } from "../viewer/telemetry/usePageTracking";
+import { useViewerSessionStore } from "../viewer/store/viewerSessionStore";
 import type { Document } from "../types";
 
 export default function DocxDocumentViewer() {
@@ -15,6 +19,27 @@ export default function DocxDocumentViewer() {
   const [doc, setDoc] = useState<Document | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+
+  const session = useViewerSessionStore((s) => s.session);
+
+  // Create a BeaconQueue once the document is loaded.
+  const queue = useMemo(() => {
+    if (!doc) return null;
+    return new BeaconQueue({
+      sessionId: `docx_session_${Date.now()}`,
+      scopedToken: id ?? "",
+      documentId: doc.id,
+      recipientId: session?.recipientId ?? doc.ownerId ?? "",
+      pageCount: Math.max(1, doc.pageCount),
+    });
+  }, [doc, id, session?.recipientId]);
+
+  // Wire the dispatcher (flush every 5s, on visibility change, on unload).
+  useBeaconDispatcher(queue);
+
+  // Track time spent on the current page.
+  usePageTracking(currentPage, queue, !!doc);
 
   useEffect(() => {
     if (!id) return;
@@ -33,6 +58,16 @@ export default function DocxDocumentViewer() {
         setLoading(false);
       });
   }, [id]);
+
+  // Reset to page 1 when the document changes.
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [doc?.id]);
+
+  const handlePageChange = useCallback((page: number) => {
+    setCurrentPage(page);
+    console.log("[DocxDocumentViewer] page changed:", page);
+  }, []);
 
   if (loading) {
     return (
@@ -84,11 +119,11 @@ export default function DocxDocumentViewer() {
             </svg>
           </button>
           <div>
-            <h1 className="text-2xl font-semibold text-gray-800 dark:text-white">
+            <h1 className="text-xl font-semibold text-gray-800 dark:text-white">
               {doc.name}
             </h1>
             <p className="text-sm text-gray-500 dark:text-gray-400">
-              Word Document Viewer
+              Word Document Viewer · Page {currentPage} of {Math.max(1, doc.pageCount)}
             </p>
           </div>
         </div>
@@ -98,10 +133,8 @@ export default function DocxDocumentViewer() {
         source={doc.dataUrl ?? doc.url ?? null}
         title={doc.name}
         pageCount={doc.pageCount}
-        onPageChange={(page) => {
-          // Future: hook up page tracking here
-          console.log("[DocxDocumentViewer] page changed:", page);
-        }}
+        onPageChange={handlePageChange}
+        height="60vh"
       />
     </div>
   );

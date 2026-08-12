@@ -124,7 +124,11 @@ export default function SharedDocuments() {
                         <div className="flex items-center gap-2">
                           <button
                             type="button"
-                            onClick={() => navigate(`/documents/${doc.id}`)}
+                            onClick={() =>
+                              doc.docType === "docx"
+                                ? navigate(`/docx-viewer/${doc.id}`)
+                                : navigate(`/documents/${doc.id}`)
+                            }
                             className="inline-flex items-center gap-1 rounded-lg bg-brand-500 px-2.5 py-1 text-xs font-semibold text-white transition hover:bg-brand-600"
                           >
                             <svg
