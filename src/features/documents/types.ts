@@ -32,6 +32,8 @@ export interface Document {
   latestPdfUrl?: string;
   /** Cloud Storage URL to the latest exported DOCX. */
   latestDocxUrl?: string;
+  /** The current user's access role for this document (e.g. if shared with them). */
+  sharedRole?: "owner" | "editor" | "viewer";
 }
 
 /** A single version snapshot of an editable (.docx) document. */

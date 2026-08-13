@@ -21,6 +21,7 @@ import { getViewerIdentity } from "../utils/userIdentity";
 import { useAppSelector } from "../../../store/hooks";
 import { selectUser } from "../../../store/selectors";
 import type { Document, Recipient, TrackingLink } from "../types";
+import DocxEditor from "./components/DocxEditor";
 
 /** Convert a File to a base64 data URL */
 const fileToDataUrl = (file: File): Promise<string> => {
@@ -51,6 +52,7 @@ export default function DocxViewerPage() {
   // Share modal state
   const [shareDoc, setShareDoc] = useState<Document | null>(null);
   const [shareRecipientId, setShareRecipientId] = useState("");
+  const [shareRole, setShareRole] = useState<"viewer" | "editor">("viewer");
   const [sharing, setSharing] = useState(false);
   const [shareError, setShareError] = useState<string | null>(null);
   const [shareSuccess, setShareSuccess] = useState<string | null>(null);
@@ -164,7 +166,7 @@ export default function DocxViewerPage() {
     setShareError(null);
     setShareSuccess(null);
     try {
-      const link = await shareDocument(shareDoc.id, shareRecipientId);
+      const link = await shareDocument(shareDoc.id, shareRecipientId, shareRole);
       setDocxDocs((prev) =>
         prev.map((d) =>
           d.id === shareDoc.id
@@ -174,9 +176,10 @@ export default function DocxViewerPage() {
       );
       setLinks((prev) => [link, ...prev]);
       setShareSuccess(
-        `Shared with ${recipients.find((r) => r.id === shareRecipientId)?.username ?? "user"}! Tracking link generated.`,
+        `Shared as ${shareRole} with ${recipients.find((r) => r.id === shareRecipientId)?.username ?? "user"}! Tracking link generated.`,
       );
       setShareRecipientId("");
+      setShareRole("viewer");
       setTimeout(() => {
         setShareDoc(null);
         setShareSuccess(null);
@@ -186,7 +189,7 @@ export default function DocxViewerPage() {
     } finally {
       setSharing(false);
     }
-  }, [shareDoc, shareRecipientId, recipients]);
+  }, [shareDoc, shareRecipientId, shareRole, recipients]);
 
   const handleRevokeAccess = useCallback(
     async (docId: string, recipientId: string) => {
@@ -338,7 +341,8 @@ export default function DocxViewerPage() {
                       d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
                     />
                   </svg>
-                  Saved to Firebase
+                  {/* Saved to Firebase */}
+                  Uploaded
                 </span>
               )}
               <button
@@ -350,18 +354,18 @@ export default function DocxViewerPage() {
                 {saving ? (
                   <>
                     <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                    Saving…
+                    Uploading…
                   </>
                 ) : saved ? (
-                  "Saved"
+                  "Uploaded"
                 ) : (
-                  "Save to Firebase"
+                  "Upload to Firebase"
                 )}
               </button>
             </div>
 
           </div>
-        )}
+        )}  
 
         {justUploadedDoc && (
           <ShareDocumentPanel
@@ -540,6 +544,14 @@ export default function DocxViewerPage() {
                             >
                               Open
                             </button>
+                            <a
+                              href={`/docx-editor/${doc.id}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center gap-1 rounded-lg bg-blue-500 px-2.5 py-1 text-xs font-semibold text-white transition hover:bg-blue-600"
+                            >
+                              Edit
+                            </a>
                             <button
                               type="button"
                               onClick={() =>
@@ -647,6 +659,18 @@ export default function DocxViewerPage() {
                     {rec.username} ({rec.email})
                   </option>
                 ))}
+            </select>
+
+            <label className="mt-3 mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">
+              Access level
+            </label>
+            <select
+              value={shareRole}
+              onChange={(e) => setShareRole(e.target.value as "viewer" | "editor")}
+              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-800 outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 dark:border-gray-600 dark:bg-gray-900 dark:text-white"
+            >
+              <option value="viewer">Viewer (Read-only)</option>
+              <option value="editor">Editor (Can edit & save)</option>
             </select>
 
             {shareError && (

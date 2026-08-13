@@ -29,6 +29,7 @@ export default function ShareDocumentPanel({
   onLinkGenerated,
 }: ShareDocumentPanelProps) {
   const [selectedRecipientId, setSelectedRecipientId] = useState("");
+  const [shareRole, setShareRole] = useState<"viewer" | "editor">("viewer");
   const [sharing, setSharing] = useState(false);
   const [shareError, setShareError] = useState<string | null>(null);
   const [shareSuccess, setShareSuccess] = useState<string | null>(null);
@@ -54,7 +55,7 @@ export default function ShareDocumentPanel({
     setShareError(null);
     setShareSuccess(null);
     try {
-      const link = await shareDocument(document.id, selectedRecipientId);
+      const link = await shareDocument(document.id, selectedRecipientId, shareRole);
       // Update the document's sharedWith list.
       const updatedDoc: Document = {
         ...document,
@@ -63,14 +64,15 @@ export default function ShareDocumentPanel({
       onDocumentUpdated(updatedDoc);
       onLinkGenerated(link);
       setGeneratedLink(link);
-      setShareSuccess(`Document shared successfully! Tracking link generated.`);
+      setShareSuccess(`Document shared as ${shareRole} successfully! Tracking link generated.`);
       setSelectedRecipientId("");
+      setShareRole("viewer");
     } catch {
       setShareError("Failed to share the document. Please try again.");
     } finally {
       setSharing(false);
     }
-  }, [document, selectedRecipientId, onDocumentUpdated, onLinkGenerated]);
+  }, [document, selectedRecipientId, shareRole, onDocumentUpdated, onLinkGenerated]);
 
   return (
     <div className="mt-4 rounded-xl border border-brand-200 bg-brand-50/50 p-4 dark:border-brand-500/30 dark:bg-brand-500/10">
@@ -84,11 +86,11 @@ export default function ShareDocumentPanel({
       </div>
 
       {/* User selection dropdown */}
-      <div className="flex gap-2">
+      <div className="flex flex-col sm:flex-row gap-2">
         <select
           value={selectedRecipientId}
           onChange={(e) => setSelectedRecipientId(e.target.value)}
-          className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-800 outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 dark:border-gray-600 dark:bg-gray-900 dark:text-white"
+          className="flex-1 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-800 outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 dark:border-gray-600 dark:bg-gray-900 dark:text-white"
         >
           <option value="">Select a user to share with…</option>
           {availableRecipients.map((rec) => (
@@ -96,6 +98,14 @@ export default function ShareDocumentPanel({
               {rec.username} ({rec.email})
             </option>
           ))}
+        </select>
+        <select
+          value={shareRole}
+          onChange={(e) => setShareRole(e.target.value as "viewer" | "editor")}
+          className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-800 outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 dark:border-gray-600 dark:bg-gray-900 dark:text-white"
+        >
+          <option value="viewer">Viewer</option>
+          <option value="editor">Editor</option>
         </select>
         <button
           type="button"

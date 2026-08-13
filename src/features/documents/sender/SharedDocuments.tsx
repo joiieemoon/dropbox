@@ -151,6 +151,16 @@ export default function SharedDocuments() {
                             </svg>
                             View
                           </button>
+                          {doc.docType === "docx" && doc.sharedRole === "editor" && (
+                            <a
+                              href={`/docx-editor/${doc.id}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center gap-1 rounded-lg bg-blue-500 px-2.5 py-1 text-xs font-semibold text-white transition hover:bg-blue-600"
+                            >
+                              Edit
+                            </a>
+                          )}
                         </div>
                       </td>
                     </tr>

@@ -264,6 +264,7 @@ export async function listRecipients(): Promise<Recipient[]> {
 export async function shareDocument(
   documentId: string,
   recipientId: string,
+  role: "viewer" | "editor" = "viewer",
 ): Promise<TrackingLink> {
   const uid = auth.currentUser?.uid;
   if (!uid) throw new Error("You must be signed in to share documents");
@@ -280,7 +281,7 @@ export async function shareDocument(
   const accessRef = doc(db, "documents", documentId, "access", recipientId);
   await setDoc(accessRef, {
     userId: recipientId,
-    role: "viewer",
+    role,
     grantedBy: uid,
     grantedAt: serverTimestamp(),
     active: true,
@@ -289,7 +290,9 @@ export async function shareDocument(
   const docRef = doc(db, "documents", documentId);
   const docSnap = await getDoc(docRef);
   const existing = docSnap.data()?.sharedWith ?? [];
-  await updateDoc(docRef, { sharedWith: [...existing, recipientId] });
+  if (!existing.includes(recipientId)) {
+    await updateDoc(docRef, { sharedWith: [...existing, recipientId] });
+  }
 
   const linkId = linkRef.id;
   return {
@@ -300,6 +303,83 @@ export async function shareDocument(
     url: `${window.location.origin}/v/${linkId}`,
     createdAt: new Date().toISOString(),
   };
+}
+
+/**
+ * Update an existing editable Word (.docx) document with a new saved Blob.
+ */
+export async function updateEditableDocument(
+  documentId: string,
+  docxBlob: Blob,
+  pageCount: number,
+  newVersion: number,
+): Promise<string> {
+  console.log("[documentsApi] starting updateEditableDocument for:", documentId, {
+    blobSize: docxBlob.size,
+    pageCount,
+    newVersion,
+  });
+
+  const uid = auth.currentUser?.uid;
+  if (!uid) {
+    console.error("[documentsApi] Save aborted: user not logged in");
+    throw new Error("You must be signed in to save documents");
+  }
+
+  // Convert Blob to data URL
+  console.log("[documentsApi] converting blob to data url...");
+  const dataUrl = await readFileAsDataUrl(new File([docxBlob], "document.docx"));
+  console.log("[documentsApi] data url generated. string length:", dataUrl.length);
+
+  const MAX_DOCX_SIZE = 850 * 1024; // 850KB limits
+  if (docxBlob.size > MAX_DOCX_SIZE) {
+    console.error("[documentsApi] File too large:", docxBlob.size);
+    throw new Error(
+      `The updated document is too large (${(docxBlob.size / 1024).toFixed(0)}KB). ` +
+        `Firestore can only store documents up to 1MB. ` +
+        `Please reduce the content size.`
+    );
+  }
+
+  console.log("[documentsApi] updating firestore doc:", documentId);
+  const docRef = doc(db, "documents", documentId);
+  await updateDoc(docRef, {
+    dataUrl,
+    latestDocxUrl: dataUrl,
+    pageCount,
+    sizeBytes: docxBlob.size,
+    currentVersion: newVersion,
+    updatedAt: serverTimestamp(),
+  });
+  console.log("[documentsApi] firestore updateDoc completed successfully.");
+
+  return dataUrl;
+}
+
+/**
+ * Check the current user's role access for a specific document.
+ */
+export async function getDocumentAccessRole(
+  documentId: string,
+): Promise<"owner" | "editor" | "viewer" | null> {
+  const uid = auth.currentUser?.uid;
+  if (!uid) return null;
+
+  // 1. Check if owner
+  const docRef = doc(db, "documents", documentId);
+  const docSnap = await getDoc(docRef);
+  if (!docSnap.exists()) return null;
+  const data = docSnap.data();
+  if (data.ownerId === uid) return "owner";
+
+  // 2. Check access subcollection
+  const accessRef = doc(db, "documents", documentId, "access", uid);
+  const accessSnap = await getDoc(accessRef);
+  if (accessSnap.exists() && accessSnap.data()?.active === true) {
+    return accessSnap.data()?.role ?? "viewer";
+  }
+
+  return null;
 }
 
 /**
@@ -474,6 +554,7 @@ export async function listSharedDocuments(): Promise<Document[]> {
           currentVersion: data.currentVersion ?? undefined,
           latestPdfUrl: data.latestPdfUrl ?? undefined,
           latestDocxUrl: data.latestDocxUrl ?? undefined,
+          sharedRole: accessSnap.data()?.role ?? "viewer",
         } as Document);
       }
     }

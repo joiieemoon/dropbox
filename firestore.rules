@@ -16,6 +16,13 @@ service cloud.firestore {
         exists(/databases/$(database)/documents/documents/$(documentId)/access/$(request.auth.uid));
     }
 
+    function isEditor(documentId) {
+      return signedIn() &&
+        exists(/databases/$(database)/documents/documents/$(documentId)/access/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/documents/$(documentId)/access/$(request.auth.uid)).data.role == "editor" &&
+        get(/databases/$(database)/documents/documents/$(documentId)/access/$(request.auth.uid)).data.active == true;
+    }
+
     // For list queries, we can only check resource.data directly.
     // This allows listing documents where the current user is the owner.
     function isOwnerList() {
@@ -32,7 +39,7 @@ service cloud.firestore {
     match /documents/{documentId} {
       allow create: if signedIn();
       allow read: if isOwner(documentId) || hasAccess(documentId) || isOwnerList();
-      allow update: if isOwner(documentId) || isOwnerList();
+      allow update: if isOwner(documentId) || isOwnerList() || isEditor(documentId);
       allow delete: if isOwner(documentId);
 
       match /access/{userId} {
