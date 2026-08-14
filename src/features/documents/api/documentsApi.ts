@@ -17,7 +17,7 @@ import {
   serverTimestamp,
 } from "firebase/firestore";
 import { db, auth } from "../../../firebase";
-import type { Document, Recipient, TrackingLink } from "../types";
+import type { Document, Recipient, RevisionMeta, TrackingLink } from "../types";
 
 /**
  * Get a single document by ID.
@@ -42,6 +42,7 @@ export async function getDocumentById(id: string): Promise<Document | null> {
     currentVersion: data.currentVersion ?? undefined,
     latestPdfUrl: data.latestPdfUrl ?? undefined,
     latestDocxUrl: data.latestDocxUrl ?? undefined,
+    revisions: data.revisions ?? [],
   } as Document;
 }
 
@@ -70,6 +71,7 @@ export async function listDocuments(): Promise<Document[]> {
       currentVersion: data.currentVersion ?? undefined,
       latestPdfUrl: data.latestPdfUrl ?? undefined,
       latestDocxUrl: data.latestDocxUrl ?? undefined,
+      revisions: data.revisions ?? [],
     } as Document;
   });
 }
@@ -218,6 +220,104 @@ export async function registerEditableDocument(
 }
 
 /**
+ * Save tracked change (revision) metadata to Firestore.
+ * Merges new revisions with existing ones on the document.
+ *
+ * Allows BOTH the document owner and users with "editor" access role
+ * to save revisions, so editors can persist their tracked changes.
+ *
+ * @returns The merged revision array (existing + new) for the caller
+ *          to update local state immediately.
+ */
+export async function saveDocumentRevisions(
+  documentId: string,
+  revisions: RevisionMeta[],
+): Promise<RevisionMeta[]> {
+  const uid = auth.currentUser?.uid;
+  if (!uid) throw new Error("You must be signed in to save revisions");
+
+  const docRef = doc(db, "documents", documentId);
+  const docSnap = await getDoc(docRef);
+  if (!docSnap.exists()) throw new Error("Document not found");
+
+  const data = docSnap.data();
+  const isOwner = data?.ownerId === uid;
+  if (!isOwner) {
+    // Editors with granted access can also save revisions.
+    const accessRef = doc(db, "documents", documentId, "access", uid);
+    const accessSnap = await getDoc(accessRef);
+    const role = accessSnap.exists() ? accessSnap.data()?.role : null;
+    if (role !== "editor") {
+      throw new Error("You must be the owner or an editor to save revisions");
+    }
+  }
+
+  const existing = (data?.revisions ?? []) as RevisionMeta[];
+  // Merge: keep existing revisions, append new ones (dedupe by id)
+  const existingIds = new Set(existing.map((r) => r.id));
+  const newRevisions = revisions.filter((r) => !existingIds.has(r.id));
+  const merged = [...existing, ...newRevisions];
+
+  await updateDoc(docRef, {
+    revisions: merged,
+    updatedAt: serverTimestamp(),
+  });
+
+  return merged;
+}
+
+/**
+ * Update the approval status of a specific revision.
+ * Allows both the owner and users with "editor" access role.
+ */
+export async function updateRevisionStatus(
+  documentId: string,
+  revisionId: string,
+  status: "accepted" | "rejected",
+): Promise<void> {
+  const uid = auth.currentUser?.uid;
+  if (!uid) throw new Error("You must be signed in to update revisions");
+
+  const docRef = doc(db, "documents", documentId);
+  const docSnap = await getDoc(docRef);
+  if (!docSnap.exists()) throw new Error("Document not found");
+
+  const data = docSnap.data();
+  const isOwner = data?.ownerId === uid;
+  if (!isOwner) {
+    // Check if user has "editor" role via access subcollection
+    const accessRef = doc(db, "documents", documentId, "access", uid);
+    const accessSnap = await getDoc(accessRef);
+    const role = accessSnap.exists() ? accessSnap.data()?.role : null;
+    if (role !== "editor") {
+      throw new Error("You must be the owner or an editor to review changes");
+    }
+  }
+
+  const existing = (data?.revisions ?? []) as RevisionMeta[];
+  const updated = existing.map((r) =>
+    r.id === revisionId ? { ...r, status } : r,
+  );
+
+  await updateDoc(docRef, {
+    revisions: updated,
+    updatedAt: serverTimestamp(),
+  });
+}
+
+/**
+ * Fetch the revision history for a document.
+ */
+export async function getDocumentRevisions(
+  documentId: string,
+): Promise<RevisionMeta[]> {
+  const docRef = doc(db, "documents", documentId);
+  const snap = await getDoc(docRef);
+  if (!snap.exists()) return [];
+  return (snap.data()?.revisions ?? []) as RevisionMeta[];
+}
+
+/**
  * Update the page count for an existing document.
  * Used when Syncfusion detects the real page count after loading.
  */
@@ -307,6 +407,8 @@ export async function shareDocument(
 
 /**
  * Update an existing editable Word (.docx) document with a new saved Blob.
+ * Allows BOTH the document owner and users with "editor" access role
+ * to save the latest content.
  */
 export async function updateEditableDocument(
   documentId: string,
@@ -326,6 +428,21 @@ export async function updateEditableDocument(
     throw new Error("You must be signed in to save documents");
   }
 
+  // Verify access: owner OR editor role can save content.
+  const docRef = doc(db, "documents", documentId);
+  const docSnap = await getDoc(docRef);
+  if (!docSnap.exists()) throw new Error("Document not found");
+  const docData = docSnap.data();
+  const isOwner = docData?.ownerId === uid;
+  if (!isOwner) {
+    const accessRef = doc(db, "documents", documentId, "access", uid);
+    const accessSnap = await getDoc(accessRef);
+    const role = accessSnap.exists() ? accessSnap.data()?.role : null;
+    if (role !== "editor") {
+      throw new Error("You must be the owner or an editor to save documents");
+    }
+  }
+
   // Convert Blob to data URL
   console.log("[documentsApi] converting blob to data url...");
   const dataUrl = await readFileAsDataUrl(new File([docxBlob], "document.docx"));
@@ -342,7 +459,6 @@ export async function updateEditableDocument(
   }
 
   console.log("[documentsApi] updating firestore doc:", documentId);
-  const docRef = doc(db, "documents", documentId);
   await updateDoc(docRef, {
     dataUrl,
     latestDocxUrl: dataUrl,
@@ -555,6 +671,7 @@ export async function listSharedDocuments(): Promise<Document[]> {
           latestPdfUrl: data.latestPdfUrl ?? undefined,
           latestDocxUrl: data.latestDocxUrl ?? undefined,
           sharedRole: accessSnap.data()?.role ?? "viewer",
+          revisions: data.revisions ?? [],
         } as Document);
       }
     }

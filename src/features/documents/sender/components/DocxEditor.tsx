@@ -11,7 +11,8 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
-
+import { useSelector } from "react-redux";
+import { RootState } from "../../../../store";
 import {
   DocumentEditorContainerComponent,
   Inject,
@@ -23,22 +24,38 @@ import {
   Selection,
   Search,
   ContextMenu,
-  Comment,
-  ImageResizer,
-  OptionsPane,
+  // Comment,
+  // ImageResizer,
+  // OptionsPane,
 } from "@syncfusion/ej2-react-documenteditor";
 
 import type { DocumentEditorContainerComponent as ContainerType } from "@syncfusion/ej2-react-documenteditor";
 
-import type { ViewChangeEventArgs } from "@syncfusion/ej2-documenteditor";
+import type { ViewChangeEventArgs, Revision } from "@syncfusion/ej2-documenteditor";
+import type { RevisionMeta } from "../../types";
 
 export const EJ2_SERVICES_URL =
   "https://document.syncfusion.com/web-services/docx-editor/api/documenteditor/";
+
+/**
+ * Merge two arrays of revisions, deduplicating by revision ID.
+ * Items from `secondary` that already exist in `primary` (by ID) are skipped.
+ * Returns the merged array.
+ */
+function mergeRevisions(
+  primary: RevisionMeta[],
+  secondary: RevisionMeta[],
+): RevisionMeta[] {
+  const existingIds = new Set(primary.map((r) => r.id));
+  const fresh = secondary.filter((r) => !existingIds.has(r.id));
+  return [...primary, ...fresh];
+}
 
 export interface DocxEditorSaveResult {
   sfdt: string;
   docxBlob: Blob;
   pageCount: number;
+  revisions: RevisionMeta[];
 }
 
 interface DocxEditorProps {
@@ -46,9 +63,14 @@ interface DocxEditorProps {
   title?: string;
   pageCount?: number;
   version?: number;
+  revisions?: RevisionMeta[];
   onPageChange?: (page: number) => void;
   onPageCountChange?: (pageCount: number) => void;
   onSave?: (result: DocxEditorSaveResult, newVersion: number) => void;
+  onRevisionStatusChange?: (
+    revisionId: string,
+    status: "accepted" | "rejected",
+  ) => void;
   height?: string;
 }
 
@@ -57,9 +79,11 @@ export default function DocxEditor({
   title,
   pageCount = 1,
   version = 1,
+  revisions = [],
   onPageChange,
   onPageCountChange,
   onSave,
+  onRevisionStatusChange,
   height = "70vh",
 }: DocxEditorProps) {
   const containerRef = useRef<ContainerType | null>(null);
@@ -76,10 +100,29 @@ export default function DocxEditor({
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(Math.max(1, pageCount));
   const [saving, setSaving] = useState(false);
-
+  const [revisionHistory, setRevisionHistory] =
+    useState<RevisionMeta[]>(revisions);
+  const [revisionActionMsg, setRevisionActionMsg] = useState<string | null>(
+    null,
+  );
+  const pendingRevisionsRef = useRef<RevisionMeta[]>([]);
+  const user = useSelector((state: RootState) => state.auth.user);
+  // Resolve the actual editor's display name from the logged-in user profile.
+  // Falls back through username → email-prefix → email → full name → name.
+  const authorName =
+    user?.username ||
+    user?.email?.split("@")[0] ||
+    user?.email ||
+    `${user?.firstName ?? ""} ${user?.lastName ?? ""}`.trim() ||
+    user?.name ||
+    "Unknown User";
   useEffect(() => {
     pendingSource.current = source;
-  }, [source]); 
+  }, [source]);
+
+  useEffect(() => {
+    setRevisionHistory(revisions);
+  }, [revisions]);
 
   const dataUrlToFile = useCallback(
     (dataUrl: string, filename: string): File => {
@@ -100,7 +143,8 @@ export default function DocxEditor({
     const editor = containerRef.current?.documentEditor;
     if (!editor) return;
     const count = editor.pageCount;
-    if (typeof count !== "number" || !Number.isFinite(count) || count <= 0) return;
+    if (typeof count !== "number" || !Number.isFinite(count) || count <= 0)
+      return;
     if (count === totalPagesRef.current) return;
     totalPagesRef.current = count;
     setTotalPages(count);
@@ -132,6 +176,49 @@ export default function DocxEditor({
     currentPageRef.current = 1;
     setCurrentPage(1);
   }, [refreshTotalPageCount]);
+
+  const handleContentChange = useCallback(() => {
+    // Debounce to let Syncfusion update the revision collection
+    window.setTimeout(() => {
+      const editor = containerRef.current?.documentEditor;
+      if (!editor) return;
+      try {
+        const revs = editor.revisions?.revisions ?? [];
+        if (revs.length > 0) {
+          const captured = revs.map((rev) => {
+            let content = "";
+            try {
+              content = rev.getContent();
+            } catch {
+              content = "";
+            }
+            return {
+              id: rev.revisionID,
+              // Use the actual author from Syncfusion first,
+              // fall back to the logged-in user for robustness.
+              author: rev.author || authorName,
+              date: rev.date,
+              type: rev.revisionType,
+              content,
+              status: "pending" as const,
+              version: version + 1,
+            };
+          });
+          // MERGE with any existing pending revisions (don't replace)
+          pendingRevisionsRef.current = mergeRevisions(
+            pendingRevisionsRef.current,
+            captured,
+          );
+          console.log(
+            "[DocxEditor] Captured revisions from contentChange:",
+            captured.length,
+          );
+        }
+      } catch (e) {
+        console.warn("[DocxEditor] Failed to capture revisions:", e);
+      }
+    }, 100);
+  }, [version, authorName]);
 
   const loadIntoEditor = useCallback(
     async (src: File | string, name: string) => {
@@ -168,9 +255,11 @@ export default function DocxEditor({
           setDocName(name || src.name || "Document");
         }
 
-        // Re-apply edit mode after opening
+        // Re-apply edit mode AFTER document loads (enableTrackChanges gets wiped on open)
         editor.isReadOnly = false;
         editor.enableTrackChanges = true;
+        // Set current user so changes are tagged as tracked revisions
+        editor.currentUser = authorName;
 
         refreshTotalPageCount();
 
@@ -209,9 +298,12 @@ export default function DocxEditor({
     // EDIT MODE: enable editing
     editor.isReadOnly = false;
     editor.enableTrackChanges = true;
-
+    // Set current user so changes are tagged as tracked revisions
+    editor.currentUser = authorName;
+    console.log("[DocxEditor] currentUser:", editor.currentUser);
     editor.viewChange = handleViewChange;
     editor.documentChange = handleDocumentChange;
+    editor.contentChange = handleContentChange;
 
     if (createdRef.current) return;
     createdRef.current = true;
@@ -229,6 +321,7 @@ export default function DocxEditor({
   }, [
     handleViewChange,
     handleDocumentChange,
+    handleContentChange,
     loadIntoEditor,
     title,
     refreshTotalPageCount,
@@ -244,7 +337,8 @@ export default function DocxEditor({
     (page: number) => {
       const editor = containerRef.current?.documentEditor;
       if (!editor) return;
-      const actualTotal = editor.pageCount || totalPagesRef.current || pageCount;
+      const actualTotal =
+        editor.pageCount || totalPagesRef.current || pageCount;
       const target = Math.max(1, Math.min(page, actualTotal));
       editor.scrollToPage(target - 1);
     },
@@ -289,15 +383,83 @@ export default function DocxEditor({
       const docxBlob = await editor.saveAsBlob("Docx");
       console.log("[DocxEditor] docx blob exported, size:", docxBlob.size);
 
+      // Extract tracked changes (revisions) from Syncfusion.
+      // First use revisions captured from contentChange events.
+      const capturedFromChanges: RevisionMeta[] = [...pendingRevisionsRef.current];
+
+      // IMPORTANT: Also merge in ANY revisions currently in the editor
+      // that may not have been captured yet (e.g. changes made right
+      // before clicking save). This ensures ALL tracked changes from
+      // every editor session are captured.
+      let newRevisions: RevisionMeta[] = capturedFromChanges;
+      try {
+        const revs = editor.revisions?.revisions ?? [];
+        console.log(
+          "[DocxEditor] revisions.revisions returned:",
+          revs.length,
+          revs.map((r) => ({
+            author: r.author,
+            type: r.revisionType,
+            id: r.revisionID,
+          })),
+        );
+        const editorRevs: RevisionMeta[] = [];
+        for (const rev of revs) {
+          let content = "";
+          try {
+            content = rev.getContent();
+          } catch {
+            content = "";
+          }
+          editorRevs.push({
+            id: rev.revisionID,
+            // Use the actual author from Syncfusion first,
+            // fall back to the logged-in user for robustness.
+            author: rev.author || authorName,
+            date: rev.date,
+            type: rev.revisionType,
+            content,
+            status: "pending",
+            version: version + 1,
+          });
+        }
+        // Merge editor revisions with the ones captured from contentChange.
+        // Dedupe by revision ID so nothing is lost or duplicated.
+        newRevisions = mergeRevisions(capturedFromChanges, editorRevs);
+      } catch (revErr) {
+        console.warn(
+          "[DocxEditor] Failed to extract revisions on save:",
+          revErr,
+        );
+      }
+
+      console.log(
+        "[DocxEditor] Revisions extracted on save:",
+        newRevisions.length,
+      );
+
       const result: DocxEditorSaveResult = {
         sfdt,
         docxBlob,
         pageCount: Math.max(1, editor.pageCount || totalPagesRef.current),
+        revisions: newRevisions,
       };
 
       console.log("[DocxEditor] invoking onSave callback...");
       await onSave?.(result, version + 1);
       console.log("[DocxEditor] onSave callback completed.");
+
+      // Update local revision history state
+      if (newRevisions.length > 0) {
+        setRevisionHistory((prev) => {
+          const existingIds = new Set(prev.map((r) => r.id));
+          const fresh = newRevisions.filter((r) => !existingIds.has(r.id));
+          return [...prev, ...fresh];
+        });
+      }
+
+      // Clear captured revisions after successful save
+      pendingRevisionsRef.current = [];
     } catch (e) {
       console.error("[DocxEditor] Failed to save document:", e);
       setError("Failed to save the document. Please try again.");
@@ -306,10 +468,141 @@ export default function DocxEditor({
     }
   }, [version, onSave]);
 
+  /**
+   * Find a matching revision in the editor's in-memory collection.
+   *
+   * Syncfusion generates NEW revision IDs every time a document is opened,
+   * so the revision IDs stored in Firebase (from a previous session) will
+   * NOT match the editor's current in-memory revision IDs. We first try
+   * matching by ID, then fall back to content+author+type matching.
+   */
+  const findLiveEditorRevision = useCallback(
+    (target: RevisionMeta): Revision | null => {
+      const editor = containerRef.current?.documentEditor;
+      if (!editor) return null;
+      const revs = editor.revisions?.revisions ?? [];
+
+      // 1. Try exact ID match first (works for changes made THIS session)
+      const byId = revs.find((r) => r.revisionID === target.id);
+      if (byId) return byId;
+
+      // 2. Fall back to matching by content + author + type
+      //    (handles revisions loaded from a previously-saved document)
+      const cleanTarget = cleanRevisionContent(target.content);
+      return (
+        revs.find((r) => {
+          if (r.revisionType !== target.type) return false;
+          if ((r.author || "").trim() !== (target.author || "").trim())
+            return false;
+          let content = "";
+          try {
+            content = cleanRevisionContent(r.getContent());
+          } catch {
+            content = "";
+          }
+          return content === cleanTarget && content !== "";
+        }) ?? null
+      );
+    },
+    [],
+  );
+
+  const handleAcceptRevision = useCallback(
+    async (revisionId: string) => {
+      const editor = containerRef.current?.documentEditor;
+      if (!editor) return;
+      const target = revisionHistory.find((r) => r.id === revisionId);
+      if (!target) {
+        setRevisionActionMsg("Revision not found in history.");
+        return;
+      }
+      try {
+        const rev = findLiveEditorRevision(target);
+        if (rev) {
+          rev.accept();
+        } else {
+          // If the revision isn't in the editor (e.g. already applied on load),
+          // still update the status so the UI and Firebase reflect the review.
+          console.warn(
+            "[DocxEditor] Revision not found in editor, updating status only:",
+            revisionId,
+          );
+        }
+        setRevisionHistory((prev) =>
+          prev.map((r) =>
+            r.id === revisionId ? { ...r, status: "accepted" } : r,
+          ),
+        );
+        setRevisionActionMsg("Change accepted.");
+        onRevisionStatusChange?.(revisionId, "accepted");
+
+        // If we modified the editor content, also persist the updated document
+        // so accepted changes are saved in the .docx stored in Firebase.
+        if (rev) {
+          // Remove from pending ref so it isn't re-captured as "pending"
+          pendingRevisionsRef.current = pendingRevisionsRef.current.filter(
+            (r) => r.id !== revisionId,
+          );
+          await handleSave();
+        }
+      } catch (e) {
+        console.error("[DocxEditor] Failed to accept revision:", e);
+        setRevisionActionMsg("Failed to accept change.");
+      }
+      window.setTimeout(() => setRevisionActionMsg(null), 3000);
+    },
+    [revisionHistory, findLiveEditorRevision, onRevisionStatusChange, handleSave],
+  );
+
+  const handleRejectRevision = useCallback(
+    async (revisionId: string) => {
+      const editor = containerRef.current?.documentEditor;
+      if (!editor) return;
+      const target = revisionHistory.find((r) => r.id === revisionId);
+      if (!target) {
+        setRevisionActionMsg("Revision not found in history.");
+        return;
+      }
+      try {
+        const rev = findLiveEditorRevision(target);
+        if (rev) {
+          rev.reject();
+        } else {
+          console.warn(
+            "[DocxEditor] Revision not found in editor, updating status only:",
+            revisionId,
+          );
+        }
+        setRevisionHistory((prev) =>
+          prev.map((r) =>
+            r.id === revisionId ? { ...r, status: "rejected" } : r,
+          ),
+        );
+        setRevisionActionMsg("Change rejected.");
+        onRevisionStatusChange?.(revisionId, "rejected");
+
+        // Persist the updated document so rejected changes are removed
+        // from the .docx stored in Firebase.
+        if (rev) {
+          pendingRevisionsRef.current = pendingRevisionsRef.current.filter(
+            (r) => r.id !== revisionId,
+          );
+          await handleSave();
+        }
+      } catch (e) {
+        console.error("[DocxEditor] Failed to reject revision:", e);
+        setRevisionActionMsg("Failed to reject change.");
+      }
+      window.setTimeout(() => setRevisionActionMsg(null), 3000);
+    },
+    [revisionHistory, findLiveEditorRevision, onRevisionStatusChange, handleSave],
+  );
+
   // Expose save method via ref-like pattern using a global
   useEffect(() => {
-    (window as unknown as { __docxEditorSave: () => Promise<void> }).__docxEditorSave =
-      handleSave;
+    (
+      window as unknown as { __docxEditorSave: () => Promise<void> }
+    ).__docxEditorSave = handleSave;
   }, [handleSave]);
 
   if (error) {
@@ -325,7 +618,7 @@ export default function DocxEditor({
         </div>
       </div>
     );
-  } 
+  }
 
   return (
     <div className="rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
@@ -339,6 +632,12 @@ export default function DocxEditor({
         onNext={goNext}
         onSave={handleSave}
       />
+
+      {revisionActionMsg && (
+        <div className="border-b border-gray-200 bg-blue-50 px-4 py-2 text-xs font-medium text-blue-700 dark:border-gray-700 dark:bg-blue-500/10 dark:text-blue-400">
+          {revisionActionMsg}
+        </div>
+      )}
 
       <div className="relative" style={{ height }}>
         {loading && (
@@ -360,7 +659,7 @@ export default function DocxEditor({
             enableToolbar={true}
             showPropertiesPane={true}
             enableTrackChanges={true}
-            enableSpellCheck={true}
+            enableSpellCheck={false}
             enableComment={true}
             documentEditorSettings={{
               enableOptimizedTextMeasuring: false,
@@ -368,7 +667,7 @@ export default function DocxEditor({
             }}
             created={handleCreated}
           >
-            {/* <Inject
+            <Inject
               services={[
                 Toolbar,
                 SfdtExport,
@@ -378,24 +677,176 @@ export default function DocxEditor({
                 Selection,
                 Search,
                 ContextMenu,
-                Comment,
-                ImageResizer,
-                OptionsPane,
+                // Comment,
+                // ImageResizer,
+                // OptionsPane,
               ]}
-            /> */}<Inject
-  services={[
-    Toolbar,
-    SfdtExport,
-    WordExport,
-    Editor,
-    EditorHistory,
-    Selection,
-    Search,
-    ContextMenu,
-  ]}
-/>
+            />
           </DocumentEditorContainerComponent>
         </div>
+      </div>
+
+      <RevisionHistoryPanel
+        revisions={revisionHistory}
+        onAccept={handleAcceptRevision}
+        onReject={handleRejectRevision}
+      />
+    </div>
+  );
+}
+
+/**
+ * Format a revision date string into a readable format like:
+ * "August 14, 2026 12:41 PM".
+ */
+function formatRevisionDate(dateStr: string): string {
+  const d = new Date(dateStr);
+  if (Number.isNaN(d.getTime())) return dateStr;
+  return d.toLocaleString("en-US", {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+}
+
+/**
+ * Clean Syncfusion revision HTML content for readable display.
+ * Removes paragraph marks (¶), table track-change wrapper classes,
+ * and HTML tags so the actual changed text is shown.
+ */
+function cleanRevisionContent(html: string): string {
+  if (!html) return "";
+  try {
+    // Use DOM to parse and extract only visible text
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    // Remove paragraph mark elements
+    doc
+      .querySelectorAll(".e-de-tc-pmark, .e-de-tc-tble-cell")
+      .forEach((el) => el.remove());
+    // Remove empty table elements
+    doc
+      .querySelectorAll("table")
+      .forEach((el) => {
+        if (el.textContent?.trim() === "") el.remove();
+      });
+    return (doc.body.textContent || "").trim();
+  } catch {
+    // Fallback: strip tags via regex if DOMParser fails
+    return html
+      .replace(/<[^>]*>/g, " ")
+      .replace(/\s+/g, " ")
+      .replace(/¶/g, "")
+      .trim();
+  }
+}
+
+function RevisionHistoryPanel({
+  revisions,
+  onAccept,
+  onReject,
+}: {
+  revisions: RevisionMeta[];
+  onAccept: (revisionId: string) => void;
+  onReject: (revisionId: string) => void;
+}) {
+  if (revisions.length === 0) {
+    return (
+      <div className="border-t border-gray-200 px-4 py-3 dark:border-gray-700">
+        <h3 className="mb-1 text-sm font-semibold text-gray-800 dark:text-white">
+          Change History
+        </h3>
+        <p className="text-xs text-gray-500 dark:text-gray-400">
+          No tracked changes yet. Edits made with Track Changes enabled will
+          appear here after saving.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="border-t border-gray-200 px-4 py-3 dark:border-gray-700">
+      <div className="mb-2 flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-gray-800 dark:text-white">
+          Change History
+        </h3>
+        <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+          {revisions.length} change{revisions.length !== 1 ? "s" : ""}
+        </span>
+      </div>
+
+      <div className="max-h-48 space-y-2 overflow-y-auto">
+        {revisions.map((rev, index) => (
+          <div
+            key={rev.id}
+            className="flex items-start gap-3 rounded-lg border border-gray-200 bg-gray-50 p-2.5 dark:border-gray-700 dark:bg-gray-900"
+          >
+            <span
+              className={`mt-0.5 inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                rev.type === "Insertion"
+                  ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400"
+                  : rev.type === "Deletion"
+                    ? "bg-red-100 text-red-700 dark:bg-red-500/10 dark:text-red-400"
+                    : "bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400"
+              }`}
+            >
+              {rev.type === "Insertion"
+                ? "INSERTED"
+                : rev.type === "Deletion"
+                  ? "DELETED"
+                  : rev.type}
+            </span>
+
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 text-xs">
+                <span className="font-medium text-gray-700 dark:text-gray-300">
+                  {rev.author}
+                </span>
+                <span className="text-gray-400">{formatRevisionDate(rev.date)}</span>
+                <span
+                  className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
+                    rev.status === "accepted"
+                      ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400"
+                      : rev.status === "rejected"
+                        ? "bg-red-100 text-red-700 dark:bg-red-500/10 dark:text-red-400"
+                        : "bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400"
+                  }`}
+                >
+                  {rev.status}
+                </span>
+              </div>
+              <div className="mt-1 text-xs text-gray-600 dark:text-gray-400">
+                {cleanRevisionContent(rev.content)}
+              </div>
+              <div className="mt-1 text-[10px] font-medium text-gray-400 dark:text-gray-500">
+                Changes {index + 1} of {revisions.length}
+              </div>
+            </div>
+
+            {rev.status === "pending" && (
+              <div className="flex shrink-0 items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => onAccept(rev.id)}
+                  className="rounded-md bg-emerald-500 px-2 py-1 text-[10px] font-semibold text-white transition hover:bg-emerald-600"
+                  title="Accept change"
+                >
+                  ✓ Accept
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onReject(rev.id)}
+                  className="rounded-md bg-red-500 px-2 py-1 text-[10px] font-semibold text-white transition hover:bg-red-600"
+                  title="Reject change"
+                >
+                  ✗ Reject
+                </button>
+              </div>
+            )}
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -506,12 +957,3 @@ function DocxEditorHeader({
     </div>
   );
 }
-// </arg_value>
-// <task_progress>
-// - [x] Check available Syncfusion editor modules
-// - [x] Create DocxEditor component
-// - [ ] Add save/versioning API
-// - [ ] Wire edit mode into DocxViewerPage
-// - [ ] Test implementation
-// </task_progress>
-// </write_to_file>

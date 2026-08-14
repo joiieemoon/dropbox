@@ -1,7 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import DocxEditor, { type DocxEditorSaveResult } from "./components/DocxEditor";
-import { getDocumentById, getDocumentAccessRole, updateEditableDocument } from "../api/documentsApi";
+import {
+  getDocumentById,
+  getDocumentAccessRole,
+  getDocumentRevisions,
+  updateEditableDocument,
+  saveDocumentRevisions,
+  updateRevisionStatus,
+} from "../api/documentsApi";
 import type { Document } from "../types";
 
 export default function DocxEditorPage() {
@@ -11,7 +18,7 @@ export default function DocxEditorPage() {
   const [role, setRole] = useState<"owner" | "editor" | "viewer" | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "success" | "error">("idle");
+  const [saveStatus , setSaveStatus] = useState<"idle" | "saving" | "success" | "error">("idle");
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
 
   useEffect(() => {
@@ -39,6 +46,28 @@ export default function DocxEditorPage() {
       });
   }, [id]);
 
+  const handleRevisionStatusChange = useCallback(
+    async (revisionId: string, status: "accepted" | "rejected") => {
+      if (!id) return;
+      try {
+        await updateRevisionStatus(id, revisionId, status);
+        setDoc((prev) =>
+          prev
+            ? {
+                ...prev,
+                revisions: (prev.revisions ?? []).map((r) =>
+                  r.id === revisionId ? { ...r, status } : r,
+                ),
+              }
+            : null,
+        );
+      } catch (e) {
+        console.error("[DocxEditorPage] Failed to update revision status:", e);
+      }
+    },
+    [id],
+  );
+
   const handleSave = useCallback(
     async (result: DocxEditorSaveResult, newVersion: number) => {
       if (!id || !doc) {
@@ -58,6 +87,26 @@ export default function DocxEditorPage() {
           newVersion
         );
         console.log("[DocxEditorPage] updateEditableDocument completed successfully. URL size:", updatedUrl.length);
+
+        // Save tracked change (revision) metadata to Firestore.
+        // saveDocumentRevisions returns the canonical merged revision array
+        // (existing + new) so local state always mirrors Firebase.
+        let mergedRevisions = result.revisions ?? [];
+        if (result.revisions && result.revisions.length > 0) {
+          console.log("[DocxEditorPage] Saving revisions to Firestore:", result.revisions.length);
+          mergedRevisions = await saveDocumentRevisions(id, result.revisions);
+          console.log("[DocxEditorPage] Merged revisions now total:", mergedRevisions.length);
+        } else {
+          // Even if there are no NEW revisions this save, refresh from Firestore
+          // so the Change History panel reflects any revisions saved by other editors.
+          try {
+            mergedRevisions = await getDocumentRevisions(id);
+          } catch {
+            // Fall back to whatever we already have locally
+            mergedRevisions = doc.revisions ?? [];
+          }
+        }
+
         setDoc((prev) =>
           prev
             ? {
@@ -66,6 +115,7 @@ export default function DocxEditorPage() {
                 pageCount: result.pageCount,
                 url: updatedUrl,
                 dataUrl: updatedUrl,
+                revisions: mergedRevisions,
               }
             : null
         );
@@ -168,7 +218,9 @@ export default function DocxEditorPage() {
         title={doc.name}
         pageCount={doc.pageCount}
         version={doc.currentVersion ?? 1}
+        revisions={doc.revisions ?? []}
         onSave={handleSave}
+        onRevisionStatusChange={handleRevisionStatusChange}
         height="75vh"
       />
     </div>

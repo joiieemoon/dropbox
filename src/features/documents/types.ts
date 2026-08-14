@@ -2,6 +2,24 @@
  * Shared domain types for the Document Tracking & Analytics POC.
  */
 
+/** A single tracked change (revision) in an editable .docx document. */
+export interface RevisionMeta {
+  /** Unique revision ID from Syncfusion. */
+  id: string;
+  /** Author (email) who made the change. */
+  author: string;
+  /** ISO timestamp when the change was made. */
+  date: string;
+  /** Type of change: Insertion, Deletion, MoveTo, MoveFrom. */
+  type: "Insertion" | "Deletion" | "MoveTo" | "MoveFrom";
+  /** HTML content of the changed text (from revision.getContent()). */
+  content: string;
+  /** Approval status: pending, accepted, or rejected. */
+  status: "pending" | "accepted" | "rejected";
+  /** Document version this revision belongs to. */
+  version: number;
+}
+
 /** A PDF document uploaded by the sender. */
 export interface Document {
   id: string;
@@ -34,6 +52,8 @@ export interface Document {
   latestDocxUrl?: string;
   /** The current user's access role for this document (e.g. if shared with them). */
   sharedRole?: "owner" | "editor" | "viewer";
+  /** Tracked change history for editable documents. */
+  revisions?: RevisionMeta[];
 }
 
 /** A single version snapshot of an editable (.docx) document. */
