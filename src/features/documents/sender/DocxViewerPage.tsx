@@ -113,7 +113,7 @@ export default function DocxViewerPage() {
       await loadDocxDocuments();
       // Close the preview after saving to Firebase.
       setSelectedFile(null);
-      setDocxDataUrl(null); 
+      setDocxDataUrl(null);
     } catch (e) {
       console.error("[DocxViewerPage] Failed to save to Firebase:", e);
       setError(
@@ -171,7 +171,11 @@ export default function DocxViewerPage() {
     setShareError(null);
     setShareSuccess(null);
     try {
-      const link = await shareDocument(shareDoc.id, shareRecipientId, shareRole);
+      const link = await shareDocument(
+        shareDoc.id,
+        shareRecipientId,
+        shareRole,
+      );
       setDocxDocs((prev) =>
         prev.map((d) =>
           d.id === shareDoc.id
@@ -368,9 +372,8 @@ export default function DocxViewerPage() {
                 )}
               </button>
             </div>
-
           </div>
-        )}  
+        )}
 
         {justUploadedDoc && (
           <ShareDocumentPanel
@@ -537,69 +540,126 @@ export default function DocxViewerPage() {
                           )}
                         </td>
                         <td className="px-4 py-2">
-                          <div className="flex items-center gap-2">
-                            <button
-                              type="button"
-                              onClick={() =>
-                                navigate(
-                                  `/docx-viewer/${doc.id}?name=${encodeURIComponent(doc.name)}`,
-                                )
-                              }
-                              className="inline-flex items-center gap-1 rounded-lg bg-gray-500 px-2.5 py-1 text-xs font-semibold text-white transition hover:bg-brand-600"
-                            >
-                              Open
-                            </button>
-                            <a
-                              href={`/docx-editor/${doc.id}`}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="inline-flex items-center gap-1 rounded-lg bg-gray-500 px-2.5 py-1 text-xs font-semibold text-white transition hover:bg-blue-600"
-                            >
-                              Edit
-                            </a>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                navigate(`/analytics?doc=${doc.id}`)
-                              }
-                              className="inline-flex items-center gap-1 rounded-lg bg-gray-500 px-2.5 py-1 text-xs font-semibold text-white transition hover:bg-emerald-600"
-                            >
-                              <svg
-                                className="h-3.5 w-3.5"
-                                fill="none"
-                                viewBox="0 0 24 24"
-                                stroke="currentColor"
-                                strokeWidth={2}
+                          <div className="flex items-center gap-1.5">
+                            {/* View */}
+                            <div className="group relative">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  navigate(
+                                    `/docx-viewer/${doc.id}?name=${encodeURIComponent(doc.name)}`,
+                                  )
+                                }
+                                title="View document"
+                                className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-300 text-gray-600 transition hover:border-blue-400 hover:bg-blue-50 hover:text-blue-600 dark:border-gray-600 dark:text-gray-300 dark:hover:border-blue-500 dark:hover:bg-blue-500/10 dark:hover:text-blue-300"
                               >
-                                <path
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2 2z"
-                                />
-                              </svg>
-                              Analytics
-                            </button>
+                                <svg
+                                  className="h-4 w-4"
+                                  fill="none"
+                                  viewBox="0 0 24 24"
+                                  stroke="currentColor"
+                                  strokeWidth={2}
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z"
+                                  />
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                                  />
+                                </svg>
+                              </button>
+                              <span className="pointer-events-none absolute -top-8 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-md bg-gray-900 px-2 py-1 text-xs font-medium text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100 dark:bg-gray-700">
+                                View
+                              </span>
+                            </div>
 
-                            <button
-                              type="button"
-                    onClick={() => handleDeleteDocument(doc)}
-                              className="inline-flex items-center gap-1 rounded-lg border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-700 transition hover:bg-red-50 dark:border-red-700 dark:text-red-400 dark:hover:bg-red-900/20"
-                            >
-                              <svg
-                                className="h-3.5 w-3.5"
-                                fill="none"
-                                viewBox="0 0 24 24"
-                                stroke="currentColor"
-                                strokeWidth={2}
+                            {/* Edit */}
+                            <div className="group relative">
+                              <a
+                                href={`/docx-editor/${doc.id}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                title="Edit document"
+                                className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-300 text-gray-600 transition hover:border-indigo-400 hover:bg-indigo-50 hover:text-indigo-600 dark:border-gray-600 dark:text-gray-300 dark:hover:border-indigo-500 dark:hover:bg-indigo-500/10 dark:hover:text-indigo-300"
                               >
-                                <path
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.77H8.084a2.25 2.25 0 01-2.244-2.77L6.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.061-.94-1.75-1.816-1.618l-3.04.768a1.875 1.875 0 01-1.693-1.692l.768-3.04c.132-.876.557-1.476 1.618-1.816z"
-                                />
-                              </svg>
-                              Delete
-                            </button>
+                                <svg
+                                  className="h-4 w-4"
+                                  fill="none"
+                                  viewBox="0 0 24 24"
+                                  stroke="currentColor"
+                                  strokeWidth={2}
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L6.832 19.82a4.5 4.5 0 01-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 011.13-1.897L16.863 4.487zm0 0L19.5 7.125"
+                                  />
+                                </svg>
+                              </a>
+                              <span className="pointer-events-none absolute -top-8 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-md bg-gray-900 px-2 py-1 text-xs font-medium text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100 dark:bg-gray-700">
+                                Edit
+                              </span>
+                            </div>
+
+                            {/* Analytics */}
+                            <div className="group relative">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  navigate(`/analytics?doc=${doc.id}`)
+                                }
+                                title="View analytics"
+                                className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-300 text-gray-600 transition hover:border-emerald-400 hover:bg-emerald-50 hover:text-emerald-600 dark:border-gray-600 dark:text-gray-300 dark:hover:border-emerald-500 dark:hover:bg-emerald-500/10 dark:hover:text-emerald-300"
+                              >
+                                <svg
+                                  className="h-4 w-4"
+                                  fill="none"
+                                  viewBox="0 0 24 24"
+                                  stroke="currentColor"
+                                  strokeWidth={2}
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2 2z"
+                                  />
+                                </svg>
+                              </button>
+                              <span className="pointer-events-none absolute -top-8 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-md bg-gray-900 px-2 py-1 text-xs font-medium text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100 dark:bg-gray-700">
+                                Analytics
+                              </span>
+                            </div>
+
+                            {/* Delete */}
+                            <div className="group relative">
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteDocument(doc)}
+                                title="Delete document"
+                                className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-300 text-gray-600 transition hover:border-red-400 hover:bg-red-50 hover:text-gray-700 dark:border-gray-800 dark:text-red-400 dark:hover:border-red-600 dark:hover:bg-red-900/20 dark:hover:text-red-300"
+                              >
+                                <svg
+                                  className="h-4 w-4"
+                                  fill="none"
+                                  viewBox="0 0 24 24"
+                                  stroke="currentColor"
+                                  strokeWidth={2}
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.77H8.084a2.25 2.25 0 01-2.244-2.77L6.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.061-.94-1.75-1.816-1.618l-3.04.768a1.875 1.875 0 01-1.693-1.692l.768-3.04c.132-.876.557-1.476 1.618-1.816z"
+                                  />
+                                </svg>
+                              </button>
+                              <span className="pointer-events-none absolute -top-8 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-md bg-gray-900 px-2 py-1 text-xs font-medium text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100 dark:bg-gray-700">
+                                Delete
+                              </span>
+                            </div>
                           </div>
                         </td>
                       </tr>
@@ -622,7 +682,9 @@ export default function DocxViewerPage() {
           onConfirm={() => {
             void deleteDocument(deleteDoc.id)
               .then(() => {
-                setDocxDocs((prev) => prev.filter((d) => d.id !== deleteDoc.id));
+                setDocxDocs((prev) =>
+                  prev.filter((d) => d.id !== deleteDoc.id),
+                );
               })
               .catch((error) => {
                 console.error("Failed to delete document:", error);
@@ -715,7 +777,9 @@ export default function DocxViewerPage() {
             </label>
             <select
               value={shareRole}
-              onChange={(e) => setShareRole(e.target.value as "viewer" | "editor")}
+              onChange={(e) =>
+                setShareRole(e.target.value as "viewer" | "editor")
+              }
               className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-800 outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 dark:border-gray-600 dark:bg-gray-900 dark:text-white"
             >
               <option value="viewer">Viewer (Read-only)</option>

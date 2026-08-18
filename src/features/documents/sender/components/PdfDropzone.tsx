@@ -40,11 +40,17 @@ export default function PdfDropzone({
         const rejected = rejectedFiles[0];
         const code = rejected.errors[0]?.code;
         if (code === "file-invalid-type") {
-          setLocalError("Only PDF files are supported. Please select a .pdf file.");
+          setLocalError(
+            "Only PDF files are supported. Please select a .pdf file.",
+          );
         } else if (code === "file-too-large") {
-          setLocalError(`File is too large. Maximum size is ${MAX_FILE_SIZE_MB} MB.`);
+          setLocalError(
+            `File is too large. Maximum size is ${MAX_FILE_SIZE_MB} MB.`,
+          );
         } else {
-          setLocalError("This file could not be uploaded. Please try another file.");
+          setLocalError(
+            "This file could not be uploaded. Please try another file.",
+          );
         }
         return;
       }
@@ -54,8 +60,13 @@ export default function PdfDropzone({
       if (!file) return;
 
       // Extra safety checks.
-      if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
-        setLocalError("Only PDF files are supported. Please select a .pdf file.");
+      if (
+        file.type !== "application/pdf" &&
+        !file.name.toLowerCase().endsWith(".pdf")
+      ) {
+        setLocalError(
+          "Only PDF files are supported. Please select a .pdf file.",
+        );
         return;
       }
       if (file.size === 0) {
@@ -63,7 +74,9 @@ export default function PdfDropzone({
         return;
       }
       if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
-        setLocalError(`File is too large. Maximum size is ${MAX_FILE_SIZE_MB} MB.`);
+        setLocalError(
+          `File is too large. Maximum size is ${MAX_FILE_SIZE_MB} MB.`,
+        );
         return;
       }
 
@@ -91,15 +104,13 @@ export default function PdfDropzone({
   const displayError = error ?? localError;
 
   const dropzoneClassName = `flex flex-col items-center justify-center rounded-xl border-2 border-dashed px-6 py-10 text-center transition-colors ${
-    disabled
-      ? "cursor-not-allowed opacity-50"
-      : "cursor-pointer"
+    disabled ? "cursor-not-allowed opacity-50" : "cursor-pointer"
   } ${
     isDragActive || dragActive
-      ? "border-brand-500 bg-brand-50 dark:border-brand-400 dark:bg-brand-500/10"
+      ? "border-blue-400 bg-blue-50 dark:border-blue-500 dark:bg-blue-500/10"
       : disabled
         ? "border-gray-200 bg-gray-100 dark:border-gray-700 dark:bg-gray-800"
-        : "border-gray-300 bg-gray-50 hover:border-brand-400 hover:bg-brand-50/50 dark:border-gray-600 dark:bg-gray-900 dark:hover:border-brand-500 dark:hover:bg-brand-500/5"
+        : "border-gray-300 bg-gray-50 hover:border-gray-400 hover:bg-gray-100/50 dark:border-gray-600 dark:bg-gray-900 dark:hover:border-gray-500 dark:hover:bg-gray-500/5"
   }`;
 
   return (
@@ -112,28 +123,18 @@ export default function PdfDropzone({
         className={dropzoneClassName}
       >
         <input {...getInputProps()} ref={inputRef} />
-        <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-brand-100 text-brand-600 dark:bg-brand-500/20 dark:text-brand-400">
-          <svg
-            className="h-6 w-6"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth={2}
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"
-            />
-          </svg>
-        </div>
+        <img
+          src="/pdf.png"
+          alt="PDF icon"
+          className="mb-3 h-12 w-12 object-contain"
+        />
         <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
           {isDragActive || dragActive ? (
             "Drop the PDF here…"
           ) : (
             <>
               Drag & drop your PDF here, or{" "}
-              <span className="text-brand-600 dark:text-brand-400">browse</span>
+              <span className="text-gray-600 dark:text-gray-400">browse</span>
             </>
           )}
         </p>
@@ -144,7 +145,7 @@ export default function PdfDropzone({
 
       {uploading && (
         <div className="mt-3 flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
-          <div className="h-4 w-4 animate-spin rounded-full border-2 border-brand-500 border-t-transparent" />
+          <div className="h-4 w-4 animate-spin rounded-full border-2 border-blue-500 border-t-transparent" />
           Uploading PDF…
         </div>
       )}

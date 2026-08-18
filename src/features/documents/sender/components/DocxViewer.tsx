@@ -488,61 +488,61 @@ export default function DocxViewer({
    *
    * Syncfusion's viewChange event will do it.
    */
-  const goToPage = useCallback(
-    (page: number) => {
-      const editor = containerRef.current?.documentEditor;
+  // const goToPage = useCallback(
+  //   (page: number) => {
+  //     const editor = containerRef.current?.documentEditor;
 
-      if (!editor) {
-        return;
-      }
+  //     if (!editor) {
+  //       return;
+  //     }
 
-      /**
-       * Always get the latest page count
-       * directly from Syncfusion.
-       */
-      const actualTotal =
-        editor.pageCount || totalPagesRef.current || pageCount;
+  //     /**
+  //      * Always get the latest page count
+  //      * directly from Syncfusion.
+  //      */
+  //     const actualTotal =
+  //       editor.pageCount || totalPagesRef.current || pageCount;
 
-      const target = Math.max(1, Math.min(page, actualTotal));
+  //     const target = Math.max(1, Math.min(page, actualTotal));
 
-      editor.scrollToPage(target - 1);
-    },
-    [pageCount],
-  );
+  //     editor.scrollToPage(target - 1);
+  //   },
+  //   [pageCount],
+  // );
 
   /**
    * ------------------------------------------------------------
    * PREVIOUS
    * ------------------------------------------------------------
    */
-  const goPrev = useCallback(() => {
-    if (currentPage <= 1) {
-      return;
-    }
+  // const goPrev = useCallback(() => {
+  //   if (currentPage <= 1) {
+  //     return;
+  //   }
 
-    goToPage(currentPage - 1);
-  }, [currentPage, goToPage]);
+  //   goToPage(currentPage - 1);
+  // }, [currentPage, goToPage]);
 
   /**
    * ------------------------------------------------------------
    * NEXT
    * ------------------------------------------------------------
    */
-  const goNext = useCallback(() => {
-    const editor = containerRef.current?.documentEditor;
+  // const goNext = useCallback(() => {
+  //   const editor = containerRef.current?.documentEditor;
 
-    /**
-     * Read latest page count directly
-     * from Syncfusion.
-     */
-    const actualTotal = editor?.pageCount || totalPagesRef.current || pageCount;
+  //   /**
+  //    * Read latest page count directly
+  //    * from Syncfusion.
+  //    */
+  //   const actualTotal = editor?.pageCount || totalPagesRef.current || pageCount;
 
-    if (currentPage >= actualTotal) {
-      return;
-    }
+  //   if (currentPage >= actualTotal) {
+  //     return;
+  //   }
 
-    goToPage(currentPage + 1);
-  }, [currentPage, pageCount, goToPage]);
+  //   goToPage(currentPage + 1);
+  // }, [currentPage, pageCount, goToPage]);
 
   /**
    * ------------------------------------------------------------
@@ -577,8 +577,8 @@ export default function DocxViewer({
         loading={loading}
         currentPage={currentPage}
         totalPages={totalPages}
-        onPrev={goPrev}
-        onNext={goNext}
+        // // onPrev={goPrev}
+        // onNext={goNext}
       />
 
       <div
@@ -599,10 +599,11 @@ export default function DocxViewer({
           </div>
         )}
 
-        <div className="docx-viewer-container h-full">
+        <div className="docx-viewer-container h-full bg-amber-100">
           <DocumentEditorContainerComponent
             ref={containerRef}
             height="100%"
+            // width="70%"
             serviceUrl={EJ2_SERVICES_URL}
             enableToolbar={false}
             showPropertiesPane={false}
@@ -618,8 +619,6 @@ export default function DocxViewer({
               services={[Toolbar, SfdtExport, WordExport, Editor, Selection]}
             />
           </DocumentEditorContainerComponent>
-            
-          
         </div>
       </div>
     </div>
@@ -636,15 +635,15 @@ function DocxViewerHeader({
   loading,
   currentPage,
   totalPages,
-  onPrev,
-  onNext,
+  // onPrev,
+  // onNext,
 }: {
   name: string;
   loading: boolean;
   currentPage: number;
   totalPages: number;
-  onPrev: () => void;
-  onNext: () => void;
+  // onPrev: () => void;
+  // onNext: () => void;
 }) {
   return (
     <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3 dark:border-gray-700">
@@ -680,15 +679,33 @@ function DocxViewerHeader({
 
         {/* Navigation */}
         <div className="flex items-center gap-1">
-          <button
-            type="button"
-            onClick={onPrev}
-            disabled={currentPage <= 1}
-            className="rounded-lg border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-700 transition hover:bg-gray-50 disabled:opacity-40 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
-            aria-label="Previous page"
-          >
-            ← Prev
-          </button>
+          {/* Previous */}
+          {/* <div className="group relative">
+            <button
+              type="button"
+              onClick={onPrev}
+              disabled={currentPage <= 1}
+              aria-label="Previous page"
+              className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-300 text-gray-700 transition hover:bg-gray-50 disabled:opacity-40 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+            >
+              <svg
+                className="h-3.5 w-3.5"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M15.75 19.5L8.25 12l7.5-7.5"
+                />
+              </svg>
+            </button>
+            <span className="pointer-events-none absolute -top-8 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-md bg-gray-900 px-2 py-1 text-xs font-medium text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100 dark:bg-gray-700">
+              Previous page
+            </span>
+          </div> */}
 
           {/* 
             This is now:
@@ -700,15 +717,33 @@ function DocxViewerHeader({
             {currentPage} / {totalPages}
           </span>
 
-          <button
-            type="button"
-            onClick={onNext}
-            disabled={currentPage >= totalPages}
-            className="rounded-lg border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-700 transition hover:bg-gray-50 disabled:opacity-40 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
-            aria-label="Next page"
-          >
-            Next →
-          </button>
+          {/* Next */}
+          {/* <div className="group relative">
+            <button
+              type="button"
+              onClick={onNext}
+              disabled={currentPage >= totalPages}
+              aria-label="Next page"
+              className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-300 text-gray-700 transition hover:bg-gray-50 disabled:opacity-40 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+            >
+              <svg
+                className="h-3.5 w-3.5"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M8.25 4.5l7.5 7.5-7.5 7.5"
+                />
+              </svg>
+            </button>
+            <span className="pointer-events-none absolute -top-8 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-md bg-gray-900 px-2 py-1 text-xs font-medium text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100 dark:bg-gray-700">
+              Next page
+            </span>
+          </div> */}
         </div>
       </div>
     </div>

@@ -123,7 +123,8 @@ export default function DocxDocumentViewer() {
               {doc.name}
             </h1>
             <p className="text-sm text-gray-500 dark:text-gray-400">
-              Word Document Viewer · Page {currentPage} of {Math.max(1, doc.pageCount)}
+              Word Document Viewer · Page {currentPage} of{" "}
+              {Math.max(1, doc.pageCount)}
             </p>
           </div>
         </div>
@@ -134,7 +135,7 @@ export default function DocxDocumentViewer() {
         title={doc.name}
         pageCount={doc.pageCount}
         onPageChange={handlePageChange}
-        height="60vh"
+        height="70vh"
       />
     </div>
   );

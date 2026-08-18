@@ -86,7 +86,7 @@ export default function DocxEditor({
   onPageCountChange,
   onSave,
   // onRevisionStatusChange,
-  height = "70vh",
+  height = "80vh",
 }: DocxEditorProps) {
   const containerRef = useRef<ContainerType | null>(null);
   const pendingSource = useRef<File | string | null>(source);

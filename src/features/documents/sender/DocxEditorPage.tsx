@@ -21,7 +21,9 @@ export default function DocxEditorPage() {
   const [role, setRole] = useState<"owner" | "editor" | "viewer" | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [saveStatus , setSaveStatus] = useState<"idle" | "saving" | "success" | "error">("idle");
+  const [saveStatus, setSaveStatus] = useState<
+    "idle" | "saving" | "success" | "error"
+  >("idle");
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [editors, setEditors] = useState<DocumentEditorAccess[]>([]);
   const [editorsLoading, setEditorsLoading] = useState(false);
@@ -45,7 +47,11 @@ export default function DocxEditorPage() {
       })
       .catch((e) => {
         console.error("[DocxEditorPage] Access check failed:", e);
-        setError(e instanceof Error ? e.message : "Access denied or document not found.");
+        setError(
+          e instanceof Error
+            ? e.message
+            : "Access denied or document not found.",
+        );
       })
       .finally(() => {
         setLoading(false);
@@ -114,31 +120,46 @@ export default function DocxEditorPage() {
   const handleSave = useCallback(
     async (result: DocxEditorSaveResult, newVersion: number) => {
       if (!id || !doc) {
-        console.warn("[DocxEditorPage] Save skipped: id or doc missing", { id, doc });
+        console.warn("[DocxEditorPage] Save skipped: id or doc missing", {
+          id,
+          doc,
+        });
         return;
       }
-      console.log("[DocxEditorPage] Starting handleSave:", { id, newVersion, docName: doc.name });
+      console.log("[DocxEditorPage] Starting handleSave:", {
+        id,
+        newVersion,
+        docName: doc.name,
+      });
       setSaveStatus("saving");
       setSaveMessage(null);
 
       try {
-        console.log("[DocxEditorPage] Calling updateEditableDocument with blob size:", result.docxBlob.size);
+        console.log(
+          "[DocxEditorPage] Calling updateEditableDocument with blob size:",
+          result.docxBlob.size,
+        );
         const updatedUrl = await updateEditableDocument(
           id,
           result.docxBlob,
           result.pageCount,
-          newVersion
+          newVersion,
         );
-        console.log("[DocxEditorPage] updateEditableDocument completed successfully. URL size:", updatedUrl.length);
+        console.log(
+          "[DocxEditorPage] updateEditableDocument completed successfully. URL size:",
+          updatedUrl.length,
+        );
 
         // Save tracked change (revision) metadata to Firestore.
         // saveDocumentRevisions returns the canonical merged revision array
         // (existing + new) so local state always mirrors Firebase.
         let mergedRevisions = result.revisions ?? [];
         if (result.revisions && result.revisions.length > 0) {
-          console.log("[DocxEditorPage] Saving revisions to Firestore:", result.revisions.length);
           mergedRevisions = await saveDocumentRevisions(id, result.revisions);
-          console.log("[DocxEditorPage] Merged revisions now total:", mergedRevisions.length);
+          console.log(
+            "[DocxEditorPage] Merged revisions now total:",
+            mergedRevisions.length,
+          );
         } else {
           // Even if there are no NEW revisions this save, refresh from Firestore
           // so the Change History panel reflects any revisions saved by other editors.
@@ -160,7 +181,7 @@ export default function DocxEditorPage() {
                 dataUrl: updatedUrl,
                 revisions: mergedRevisions,
               }
-            : null
+            : null,
         );
         setSaveStatus("success");
         setSaveMessage(`Version ${newVersion} saved successfully!`);
@@ -172,11 +193,13 @@ export default function DocxEditorPage() {
         console.error("[DocxEditorPage] Failed to save document version:", e);
         setSaveStatus("error");
         setSaveMessage(
-          e instanceof Error ? e.message : "Failed to save document. Please try again."
+          e instanceof Error
+            ? e.message
+            : "Failed to save document. Please try again.",
         );
       }
     },
-    [id, doc]
+    [id, doc],
   );
 
   if (loading) {
@@ -187,24 +210,25 @@ export default function DocxEditorPage() {
     );
   }
 
-
-  if(isMobile) {
+  if (isMobile) {
     return (
       <div className="flex flex-col items-center justify-center gap-4 py-20">
-      <div className="flex flex-col items-center justify-center gap-4 py-20"> Edit Mode is only supported on desktop browsers. Please use a desktop browser to edit this document.</div>
-      <button
-        type="button"
-        onClick={() => navigate("/docx-viewer")}
-        className="inline-flex items-center gap-2 rounded-lg bg-brand-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-600"
-      >
-        ← Back to Word Documents
-      </button>
+        <div className="flex flex-col items-center justify-center gap-4 py-20">
+          {" "}
+          Edit Mode is only supported on desktop browsers. Please use a desktop
+          browser to edit this document.
+        </div>
+        <button
+          type="button"
+          onClick={() => navigate("/docx-viewer")}
+          className="inline-flex items-center gap-2 rounded-lg bg-brand-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-600"
+        >
+          ← Back to Word Documents
+        </button>
       </div>
-    )
+    );
   }
   if (error || !doc) {
-
-    
     return (
       <div className="flex flex-col items-center justify-center gap-4 py-20">
         <div className="rounded-xl border border-red-200 bg-red-50 p-6 text-center dark:border-red-800 dark:bg-red-900/20">
@@ -212,7 +236,8 @@ export default function DocxEditorPage() {
             {error || "Access Denied"}
           </p>
           <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-            You must be the owner or have been granted editor access to edit this document.
+            You must be the owner or have been granted editor access to edit
+            this document.
           </p>
         </div>
         <button
@@ -255,7 +280,11 @@ export default function DocxEditorPage() {
               Edit: {doc.name}
             </h1>
             <p className="text-sm text-gray-500 dark:text-gray-400">
-              Role: <span className="font-semibold capitalize text-brand-600 dark:text-brand-400">{role}</span> · Version {doc.currentVersion ?? 1}
+              Role:{" "}
+              <span className="font-semibold capitalize text-brand-600 dark:text-brand-400">
+                {role}
+              </span>{" "}
+              · Version {doc.currentVersion ?? 1}
             </p>
           </div>
         </div>
@@ -294,7 +323,8 @@ export default function DocxEditorPage() {
                   Editor Access
                 </h2>
                 <p className="text-sm text-gray-500 dark:text-gray-400">
-                  Users who can edit this document. Toggle to enable or disable their editing access.
+                  Users who can edit this document. Toggle to enable or disable
+                  their editing access.
                 </p>
               </div>
               <span className="rounded-full bg-brand-100 px-2.5 py-0.5 text-xs font-medium text-brand-700 dark:bg-brand-500/20 dark:text-brand-300">
@@ -328,7 +358,8 @@ export default function DocxEditorPage() {
                 No editors yet
               </h3>
               <p className="text-sm text-gray-500 dark:text-gray-400">
-                Share this document with users as "Editor" to grant them editing access.
+                Share this document with users as "Editor" to grant them editing
+                access.
               </p>
             </div>
           ) : (
@@ -399,9 +430,7 @@ export default function DocxEditorPage() {
                         >
                           <span
                             className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${
-                              active
-                                ? "translate-x-[22px]"
-                                : "translate-x-0.5"
+                              active ? "translate-x-[22px]" : "translate-x-0.5"
                             }`}
                           />
                         </button>

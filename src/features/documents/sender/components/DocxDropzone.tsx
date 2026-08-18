@@ -100,8 +100,8 @@ export default function DocxDropzone({
     hasFile ? "cursor-default opacity-60" : "cursor-pointer"
   } ${
     isDragActive
-      ? "border-brand-500 bg-brand-50 dark:border-brand-400 dark:bg-brand-500/10"
-      : "border-gray-300 bg-gray-50 hover:border-brand-400 hover:bg-brand-50/50 dark:border-gray-600 dark:bg-gray-900 dark:hover:border-brand-500 dark:hover:bg-brand-500/5"
+      ? "border-blue-400 bg-blue-50 dark:border-blue-500 dark:bg-blue-500/10"
+      : "border-gray-300 bg-gray-50 hover:border-gray-400 hover:bg-gray-100/50 dark:border-gray-600 dark:bg-gray-900 dark:hover:border-gray-500 dark:hover:bg-gray-500/5"
   }`;
 
   return (
@@ -112,20 +112,35 @@ export default function DocxDropzone({
         className={dropzoneClassName}
       >
         <input {...getInputProps()} ref={inputRef} />
-        <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-brand-100 text-brand-600 dark:bg-brand-500/20 dark:text-brand-400">
-          <svg
-            className="h-6 w-6"
+        <div className="mb-3 flex h-15 w-15 items-center justify-center rounded-full bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+          {/* <svg
+            className="h-7 w-7"
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
-            strokeWidth={2}
+            strokeWidth={1.5}
           >
             <path
               strokeLinecap="round"
               strokeLinejoin="round"
-              d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"
+              d="M3 8.25C3 7.007 4.007 6 5.25 6h5.19l.72.72a2.25 2.25 0 0 0 1.59.65h4.09a2.25 2.25 0 0 1 2.25 2.25v6.75a2.25 2.25 0 0 1-2.25 2.25H5.25A2.25 2.25 0 0 1 3 15.75V8.25Z"
             />
-          </svg>
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M9 13.5c0 .28.22.5.5.5h1c.28 0 .5-.22.5-.5v-1c0-.28-.22-.5-.5-.5h-1c-.28 0-.5.22-.5.5Z"
+            />
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M15 10.5h2.25a.75.75 0 0 1 0 1.5H15a.75.75 0 0 1 0-1.5Z"
+            />
+          </svg> */}
+          <img
+            src="/docx.png"
+            alt="PDF icon"
+            className="mb-3 h-12 w-12 object-contain"
+          />
         </div>
         <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
           {hasFile ? (
@@ -135,7 +150,7 @@ export default function DocxDropzone({
           ) : (
             <>
               Drag & drop your Word document here, or{" "}
-              <span className="text-brand-600 dark:text-brand-400">browse</span>
+              <span className="text-gray-600 dark:text-gray-400">browse</span>
             </>
           )}
         </p>

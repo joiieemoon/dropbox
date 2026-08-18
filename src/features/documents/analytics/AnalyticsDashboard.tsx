@@ -43,8 +43,12 @@ export default function AnalyticsDashboard() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-brand-500 border-t-transparent" />
+      <div className="flex items-center justify-center py-30">
+        <img
+          src="/loading_tracksend.gif"
+          alt="Loading…"
+          className="h-22 w-22 object-contain"
+        />
       </div>
     );
   }
