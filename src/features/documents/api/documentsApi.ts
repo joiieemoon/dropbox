@@ -629,6 +629,110 @@ export async function deleteDocument(documentId: string): Promise<void> {
   await deleteDoc(docRef);
 }
 
+/** A document editor with their access state. */
+export interface DocumentEditorAccess {
+  recipient: Recipient;
+  active: boolean;
+}
+
+/**
+ * List all users who have "editor" access to a document.
+ * Reads the access subcollection and joins with the users collection.
+ * Returns each editor along with whether their access is currently active.
+ */
+export async function listDocumentEditors(
+  documentId: string,
+): Promise<DocumentEditorAccess[]> {
+  const uid = auth.currentUser?.uid;
+  if (!uid) return [];
+
+  // Verify ownership
+  const docRef = doc(db, "documents", documentId);
+  const docSnap = await getDoc(docRef);
+  if (!docSnap.exists()) throw new Error("Document not found");
+  if (docSnap.data()?.ownerId !== uid)
+    throw new Error("You can only view editors for your own documents");
+
+  // Fetch all access records for this document
+  const accessQuery = collection(db, "documents", documentId, "access");
+  const accessSnap = await getDocs(accessQuery);
+
+  const editors: DocumentEditorAccess[] = [];
+
+  for (const accessDoc of accessSnap.docs) {
+    const accessData = accessDoc.data();
+    // Only include users with "editor" role
+    if (accessData?.role !== "editor") continue;
+
+    const recipientId = accessDoc.id;
+    const active = accessData?.active === true;
+
+    try {
+      const userRef = doc(db, "users", recipientId);
+      const userSnap = await getDoc(userRef);
+      const userData = userSnap.data();
+
+      editors.push({
+        recipient: {
+          id: recipientId,
+          email: userData?.email ?? "",
+          name: userData?.displayName ?? userData?.username ?? "",
+          username: userData?.username ?? userData?.email?.split("@")[0] ?? "",
+        } as Recipient,
+        active,
+      });
+    } catch {
+      // Skip users that can't be resolved
+      editors.push({
+        recipient: {
+          id: recipientId,
+          email: "",
+          name: "",
+          username: recipientId,
+        } as Recipient,
+        active,
+      });
+    }
+  }
+
+  return editors;
+}
+
+/**
+ * Toggle editor access for a user on a document.
+ * When disabling, sets the access record to inactive.
+ * When enabling, sets the access record to active with "editor" role.
+ */
+export async function toggleEditorAccess(
+  documentId: string,
+  recipientId: string,
+  active: boolean,
+): Promise<void> {
+  const uid = auth.currentUser?.uid;
+  if (!uid) throw new Error("You must be signed in to manage access");
+
+  // Verify ownership
+  const docRef = doc(db, "documents", documentId);
+  const docSnap = await getDoc(docRef);
+  if (!docSnap.exists()) throw new Error("Document not found");
+  if (docSnap.data()?.ownerId !== uid)
+    throw new Error("You can only manage access for your own documents");
+
+  // Set access record active/inactive with editor role
+  const accessRef = doc(db, "documents", documentId, "access", recipientId);
+  await setDoc(
+    accessRef,
+    {
+      userId: recipientId,
+      role: "editor",
+      grantedBy: uid,
+      grantedAt: serverTimestamp(),
+      active,
+    },
+    { merge: true },
+  );
+}
+
 /**
  * List documents shared with the current user.
  * Queries the access subcollection to find documents where the user has access.

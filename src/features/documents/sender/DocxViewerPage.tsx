@@ -4,6 +4,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { DeleteConfirmationModal } from "../../../components/ui/confirmation-modal/DeleteConfirmationModal";
 import { useNavigate } from "react-router-dom";
 import DocxDropzone from "./components/DocxDropzone";
 import DocxViewer from "./components/DocxViewer";
@@ -21,8 +22,7 @@ import { getViewerIdentity } from "../utils/userIdentity";
 import { useAppSelector } from "../../../store/hooks";
 import { selectUser } from "../../../store/selectors";
 import type { Document, Recipient, TrackingLink } from "../types";
-import DocxEditor from "./components/DocxEditor";
-
+import { deleteDocument } from "../api/documentsApi";
 /** Convert a File to a base64 data URL */
 const fileToDataUrl = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
@@ -51,6 +51,8 @@ export default function DocxViewerPage() {
 
   // Share modal state
   const [shareDoc, setShareDoc] = useState<Document | null>(null);
+  // Delete confirmation state
+  const [deleteDoc, setDeleteDoc] = useState<Document | null>(null);
   const [shareRecipientId, setShareRecipientId] = useState("");
   const [shareRole, setShareRole] = useState<"viewer" | "editor">("viewer");
   const [sharing, setSharing] = useState(false);
@@ -96,7 +98,10 @@ export default function DocxViewerPage() {
       setError("Failed to read the file. Please try again.");
     }
   }, []);
-
+  const handleDeleteDocument = useCallback((doc: Document) => {
+    // Open the delete confirmation modal
+    setDeleteDoc(doc);
+  }, []);
   const handleSaveToFirebase = useCallback(async () => {
     if (!selectedFile) return;
     setSaving(true);
@@ -108,7 +113,7 @@ export default function DocxViewerPage() {
       await loadDocxDocuments();
       // Close the preview after saving to Firebase.
       setSelectedFile(null);
-      setDocxDataUrl(null);
+      setDocxDataUrl(null); 
     } catch (e) {
       console.error("[DocxViewerPage] Failed to save to Firebase:", e);
       setError(
@@ -359,7 +364,7 @@ export default function DocxViewerPage() {
                 ) : saved ? (
                   "Uploaded"
                 ) : (
-                  "Upload to Firebase"
+                  "Upload to Storage"
                 )}
               </button>
             </div>
@@ -383,7 +388,7 @@ export default function DocxViewerPage() {
               My Word Documents
             </h2>
             <p className="text-xs text-gray-500 dark:text-gray-400">
-              Previously uploaded .docx files saved in Firestore.
+              Previously uploaded .docx files saved in store.
             </p>
           </div>
           <div className="overflow-x-auto">
@@ -540,7 +545,7 @@ export default function DocxViewerPage() {
                                   `/docx-viewer/${doc.id}?name=${encodeURIComponent(doc.name)}`,
                                 )
                               }
-                              className="inline-flex items-center gap-1 rounded-lg bg-brand-500 px-2.5 py-1 text-xs font-semibold text-white transition hover:bg-brand-600"
+                              className="inline-flex items-center gap-1 rounded-lg bg-gray-500 px-2.5 py-1 text-xs font-semibold text-white transition hover:bg-brand-600"
                             >
                               Open
                             </button>
@@ -548,7 +553,7 @@ export default function DocxViewerPage() {
                               href={`/docx-editor/${doc.id}`}
                               target="_blank"
                               rel="noreferrer"
-                              className="inline-flex items-center gap-1 rounded-lg bg-blue-500 px-2.5 py-1 text-xs font-semibold text-white transition hover:bg-blue-600"
+                              className="inline-flex items-center gap-1 rounded-lg bg-gray-500 px-2.5 py-1 text-xs font-semibold text-white transition hover:bg-blue-600"
                             >
                               Edit
                             </a>
@@ -557,7 +562,7 @@ export default function DocxViewerPage() {
                               onClick={() =>
                                 navigate(`/analytics?doc=${doc.id}`)
                               }
-                              className="inline-flex items-center gap-1 rounded-lg bg-emerald-500 px-2.5 py-1 text-xs font-semibold text-white transition hover:bg-emerald-600"
+                              className="inline-flex items-center gap-1 rounded-lg bg-gray-500 px-2.5 py-1 text-xs font-semibold text-white transition hover:bg-emerald-600"
                             >
                               <svg
                                 className="h-3.5 w-3.5"
@@ -574,6 +579,27 @@ export default function DocxViewerPage() {
                               </svg>
                               Analytics
                             </button>
+
+                            <button
+                              type="button"
+                    onClick={() => handleDeleteDocument(doc)}
+                              className="inline-flex items-center gap-1 rounded-lg border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-700 transition hover:bg-red-50 dark:border-red-700 dark:text-red-400 dark:hover:bg-red-900/20"
+                            >
+                              <svg
+                                className="h-3.5 w-3.5"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                                strokeWidth={2}
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.77H8.084a2.25 2.25 0 01-2.244-2.77L6.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.061-.94-1.75-1.816-1.618l-3.04.768a1.875 1.875 0 01-1.693-1.692l.768-3.04c.132-.876.557-1.476 1.618-1.816z"
+                                />
+                              </svg>
+                              Delete
+                            </button>
                           </div>
                         </td>
                       </tr>
@@ -585,6 +611,29 @@ export default function DocxViewerPage() {
           </div>
         </div>
       </div>
+
+      {/* Delete Confirmation Modal */}
+      {deleteDoc && (
+        <DeleteConfirmationModal
+          isOpen={!!deleteDoc}
+          title="Delete Document"
+          message={`Are you sure you want to delete "${deleteDoc.name}"? This action cannot be undone.`}
+          onClose={() => setDeleteDoc(null)}
+          onConfirm={() => {
+            void deleteDocument(deleteDoc.id)
+              .then(() => {
+                setDocxDocs((prev) => prev.filter((d) => d.id !== deleteDoc.id));
+              })
+              .catch((error) => {
+                console.error("Failed to delete document:", error);
+                alert("Failed to delete document. Please try again.");
+              })
+              .finally(() => {
+                setDeleteDoc(null);
+              });
+          }}
+        />
+      )}
 
       {/* Share Modal */}
       {shareDoc && (

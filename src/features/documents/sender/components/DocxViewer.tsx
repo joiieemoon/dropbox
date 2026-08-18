@@ -25,7 +25,6 @@ import {
 import type { DocumentEditorContainerComponent as ContainerType } from "@syncfusion/ej2-react-documenteditor";
 
 import type { ViewChangeEventArgs } from "@syncfusion/ej2-documenteditor";
-import DocxEditor from "./DocxEditor";
 
 /**
  * Syncfusion demo service used for .docx import/export.

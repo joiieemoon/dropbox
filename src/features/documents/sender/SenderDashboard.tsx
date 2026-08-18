@@ -5,6 +5,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { DeleteConfirmationModal } from "../../../components/ui/confirmation-modal/DeleteConfirmationModal";
 import PdfDropzone from "./components/PdfDropzone";
 import ShareDocumentPanel from "./components/ShareDocumentPanel";
 import {
@@ -41,6 +42,15 @@ export default function SenderDashboard() {
   const [sharing, setSharing] = useState(false);
   const [shareError, setShareError] = useState<string | null>(null);
   const [shareSuccess, setShareSuccess] = useState<string | null>(null);
+
+  // Delete confirmation state.
+  const [deleteDoc, setDeleteDoc] = useState<Document | null>(null);
+
+  // Revoke access confirmation state.
+  const [revokeDoc, setRevokeDoc] = useState<{
+    doc: Document;
+    recipientId: string;
+  } | null>(null);
 
   const handleShareDocument = useCallback(async () => {
     if (!shareDoc || !shareRecipientId) return;
@@ -143,52 +153,53 @@ export default function SenderDashboard() {
     }
   }, []);
 
-  const handleDeleteDocument = useCallback(async (docId: string) => {
-    if (
-      !window.confirm(
-        "Are you sure you want to delete this document? This action cannot be undone.",
-      )
-    ) {
-      return;
-    }
+  const handleDeleteDocument = useCallback((doc: Document) => {
+    // Open the delete confirmation modal
+    setDeleteDoc(doc);
+  }, []);
+
+  const handleConfirmDelete = useCallback(async () => {
+    if (!deleteDoc) return;
     try {
-      await deleteDocument(docId);
-      setDocuments((prev) => prev.filter((d) => d.id !== docId));
+      await deleteDocument(deleteDoc.id);
+      setDocuments((prev) => prev.filter((d) => d.id !== deleteDoc.id));
+      setDeleteDoc(null);
     } catch (error) {
       console.error("Failed to delete document:", error);
       alert("Failed to delete document. Please try again.");
     }
-  }, []);
+  }, [deleteDoc]);
 
   const handleRevokeAccess = useCallback(
-    async (docId: string, recipientId: string) => {
-      if (
-        !window.confirm(
-          "Are you sure you want to revoke access? The recipient will no longer be able to view this document.",
-        )
-      ) {
-        return;
-      }
-      try {
-        await revokeAccess(docId, recipientId);
-        // Update local state
-        setDocuments((prev) =>
-          prev.map((d) =>
-            d.id === docId
-              ? {
-                  ...d,
-                  sharedWith: d.sharedWith.filter((id) => id !== recipientId),
-                }
-              : d,
-          ),
-        );
-      } catch (error) {
-        console.error("Failed to revoke access:", error);
-        alert("Failed to revoke access. Please try again.");
-      }
+    (doc: Document, recipientId: string) => {
+      // Open the revoke access confirmation modal.
+      setRevokeDoc({ doc, recipientId });
     },
     [],
   );
+
+  const handleConfirmRevoke = useCallback(async () => {
+    if (!revokeDoc) return;
+    const { doc, recipientId } = revokeDoc;
+    try {
+      await revokeAccess(doc.id, recipientId);
+      // Update local state
+      setDocuments((prev) =>
+        prev.map((d) =>
+          d.id === doc.id
+            ? {
+                ...d,
+                sharedWith: d.sharedWith.filter((id) => id !== recipientId),
+              }
+            : d,
+        ),
+      );
+      setRevokeDoc(null);
+    } catch (error) {
+      console.error("Failed to revoke access:", error);
+      alert("Failed to revoke access. Please try again.");
+    }
+  }, [revokeDoc]);
 
   if (loading) {
     return (
@@ -338,7 +349,7 @@ export default function SenderDashboard() {
                                 <button
                                   type="button"
                                   onClick={() =>
-                                    handleRevokeAccess(doc.id, r.id)
+                                    handleRevokeAccess(doc, r.id)
                                   }
                                   className="ml-0.5 rounded-full hover:bg-red-100 dark:hover:bg-red-900/30"
                                   title="Revoke access"
@@ -390,7 +401,6 @@ export default function SenderDashboard() {
                               Add
                             </button>
                           </div>
-
                         </td>
                         <td className="px-6 py-3">
                           {docLinks.length > 0 ? (
@@ -422,28 +432,6 @@ export default function SenderDashboard() {
                         </td>
                         <td className="px-6 py-3">
                           <div className="flex items-center gap-2">
-                            {doc.docType === "docx" && (
-                              <button
-                                type="button"
-                                onClick={() => navigate("/docx-viewer")}
-                                className="inline-flex items-center gap-1 rounded-lg bg-emerald-500 px-2.5 py-1 text-xs font-semibold text-white transition hover:bg-emerald-600"
-                              >
-                                <svg
-                                  className="h-3.5 w-3.5"
-                                  fill="none"
-                                  viewBox="0 0 24 24"
-                                  stroke="currentColor"
-                                  strokeWidth={2}
-                                >
-                                  <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10"
-                                  />
-                                </svg>
-                                Edit
-                              </button>
-                            )}
                             <button
                               type="button"
                               onClick={() =>
@@ -468,7 +456,7 @@ export default function SenderDashboard() {
                             </button>
                             <button
                               type="button"
-                              onClick={() => handleDeleteDocument(doc.id)}
+                              onClick={() => handleDeleteDocument(doc)}
                               className="inline-flex items-center gap-1 rounded-lg border border-red-300 px-2.5 py-1 text-xs font-medium text-red-700 transition hover:bg-red-50 dark:border-red-700 dark:text-red-400 dark:hover:bg-red-900/20"
                             >
                               <svg
@@ -496,6 +484,32 @@ export default function SenderDashboard() {
           </div>
         )}
       </div>
+
+      {/* Delete Confirmation Modal */}
+      {deleteDoc && (
+        <DeleteConfirmationModal
+          isOpen={!!deleteDoc}
+          title="Delete Document"
+          message={`Are you sure you want to delete "${deleteDoc.name}"? This action cannot be undone.`}
+          confirmText="Delete"
+          cancelText="Cancel"
+          onClose={() => setDeleteDoc(null)}
+          onConfirm={handleConfirmDelete}
+        />
+      )}
+
+      {/* Revoke Access Confirmation Modal */}
+      {revokeDoc && (
+        <DeleteConfirmationModal
+          isOpen={!!revokeDoc}
+          title="Revoke Access"
+          message={`Are you sure you want to revoke access? The recipient will no longer be able to view this document.`}
+          confirmText="Revoke"
+          cancelText="Cancel"
+          onClose={() => setRevokeDoc(null)}
+          onConfirm={handleConfirmRevoke}
+        />
+      )}
 
       {/* Share Modal */}
       {shareDoc && (

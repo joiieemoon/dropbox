@@ -31,7 +31,7 @@ import {
 
 import type { DocumentEditorContainerComponent as ContainerType } from "@syncfusion/ej2-react-documenteditor";
 
-import type { ViewChangeEventArgs, Revision } from "@syncfusion/ej2-documenteditor";
+import type { ViewChangeEventArgs } from "@syncfusion/ej2-documenteditor";
 import type { RevisionMeta } from "../../types";
 
 export const EJ2_SERVICES_URL =
@@ -59,6 +59,7 @@ export interface DocxEditorSaveResult {
 }
 
 interface DocxEditorProps {
+  darkMode?: boolean;
   source: File | string | null;
   title?: string;
   pageCount?: number;
@@ -75,15 +76,16 @@ interface DocxEditorProps {
 }
 
 export default function DocxEditor({
+  // darkMode = true,
   source,
   title,
   pageCount = 1,
   version = 1,
-  revisions = [],
+  // revisions = [],
   onPageChange,
   onPageCountChange,
   onSave,
-  onRevisionStatusChange,
+  // onRevisionStatusChange,
   height = "70vh",
 }: DocxEditorProps) {
   const containerRef = useRef<ContainerType | null>(null);
@@ -100,11 +102,11 @@ export default function DocxEditor({
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(Math.max(1, pageCount));
   const [saving, setSaving] = useState(false);
-  const [revisionHistory, setRevisionHistory] =
-    useState<RevisionMeta[]>(revisions);
-  const [revisionActionMsg, setRevisionActionMsg] = useState<string | null>(
-    null,
-  );
+  // const [revisionHistory, setRevisionHistory] =
+  //   useState<RevisionMeta[]>(revisions);
+  // const [revisionActionMsg, setRevisionActionMsg] = useState<string | null>(
+  //   null,
+  // );
   const pendingRevisionsRef = useRef<RevisionMeta[]>([]);
   const user = useSelector((state: RootState) => state.auth.user);
   // Resolve the actual editor's display name from the logged-in user profile.
@@ -120,9 +122,9 @@ export default function DocxEditor({
     pendingSource.current = source;
   }, [source]);
 
-  useEffect(() => {
-    setRevisionHistory(revisions);
-  }, [revisions]);
+  // useEffect(() => {
+  //   setRevisionHistory(revisions);
+  // }, [revisions]);
 
   const dataUrlToFile = useCallback(
     (dataUrl: string, filename: string): File => {
@@ -239,6 +241,7 @@ export default function DocxEditor({
       // EDIT MODE: enable editing
       editor.isReadOnly = false;
       editor.enableTrackChanges = true;
+      console.log("[DocxEditor] Enabled track changes:", editor.enableTrackChanges  );
 
       try {
         if (typeof src === "string") {
@@ -291,6 +294,7 @@ export default function DocxEditor({
   );
 
   const handleCreated = useCallback(() => {
+    console.log("[DocxEditor] handleCreated triggered");
     const container = containerRef.current;
     const editor = container?.documentEditor;
     if (!editor) return;
@@ -298,6 +302,7 @@ export default function DocxEditor({
     // EDIT MODE: enable editing
     editor.isReadOnly = false;
     editor.enableTrackChanges = true;
+    console.log("[DocxEditor] enableTrackChanges:", editor.enableTrackChanges);
     // Set current user so changes are tagged as tracked revisions
     editor.currentUser = authorName;
     console.log("[DocxEditor] currentUser:", editor.currentUser);
@@ -450,13 +455,13 @@ export default function DocxEditor({
       console.log("[DocxEditor] onSave callback completed.");
 
       // Update local revision history state
-      if (newRevisions.length > 0) {
-        setRevisionHistory((prev) => {
-          const existingIds = new Set(prev.map((r) => r.id));
-          const fresh = newRevisions.filter((r) => !existingIds.has(r.id));
-          return [...prev, ...fresh];
-        });
-      }
+      // if (newRevisions.length > 0) {
+      //   setRevisionHistory((prev) => {
+      //     const existingIds = new Set(prev.map((r) => r.id));
+      //     const fresh = newRevisions.filter((r) => !existingIds.has(r.id));
+      //     return [...prev, ...fresh];
+      //   });
+      // }
 
       // Clear captured revisions after successful save
       pendingRevisionsRef.current = [];
@@ -476,127 +481,127 @@ export default function DocxEditor({
    * NOT match the editor's current in-memory revision IDs. We first try
    * matching by ID, then fall back to content+author+type matching.
    */
-  const findLiveEditorRevision = useCallback(
-    (target: RevisionMeta): Revision | null => {
-      const editor = containerRef.current?.documentEditor;
-      if (!editor) return null;
-      const revs = editor.revisions?.revisions ?? [];
+  // const findLiveEditorRevision = useCallback(
+  //   (target: RevisionMeta): Revision | null => {
+  //     const editor = containerRef.current?.documentEditor;
+  //     if (!editor) return null;
+  //     const revs = editor.revisions?.revisions ?? [];
 
-      // 1. Try exact ID match first (works for changes made THIS session)
-      const byId = revs.find((r) => r.revisionID === target.id);
-      if (byId) return byId;
+  //     // 1. Try exact ID match first (works for changes made THIS session)
+  //     const byId = revs.find((r) => r.revisionID === target.id);
+  //     if (byId) return byId;
 
-      // 2. Fall back to matching by content + author + type
-      //    (handles revisions loaded from a previously-saved document)
-      const cleanTarget = cleanRevisionContent(target.content);
-      return (
-        revs.find((r) => {
-          if (r.revisionType !== target.type) return false;
-          if ((r.author || "").trim() !== (target.author || "").trim())
-            return false;
-          let content = "";
-          try {
-            content = cleanRevisionContent(r.getContent());
-          } catch {
-            content = "";
-          }
-          return content === cleanTarget && content !== "";
-        }) ?? null
-      );
-    },
-    [],
-  );
+  //     // 2. Fall back to matching by content + author + type
+  //     //    (handles revisions loaded from a previously-saved document)
+  //     const cleanTarget = cleanRevisionContent(target.content);
+  //     return (
+  //       revs.find((r) => {
+  //         if (r.revisionType !== target.type) return false;
+  //         if ((r.author || "").trim() !== (target.author || "").trim())
+  //           return false;
+  //         let content = "";
+  //         try {
+  //           content = cleanRevisionContent(r.getContent());
+  //         } catch {
+  //           content = "";
+  //         }
+  //         return content === cleanTarget && content !== "";
+  //       }) ?? null
+  //     );
+  //   },
+  //   [],
+  // );
 
-  const handleAcceptRevision = useCallback(
-    async (revisionId: string) => {
-      const editor = containerRef.current?.documentEditor;
-      if (!editor) return;
-      const target = revisionHistory.find((r) => r.id === revisionId);
-      if (!target) {
-        setRevisionActionMsg("Revision not found in history.");
-        return;
-      }
-      try {
-        const rev = findLiveEditorRevision(target);
-        if (rev) {
-          rev.accept();
-        } else {
-          // If the revision isn't in the editor (e.g. already applied on load),
-          // still update the status so the UI and Firebase reflect the review.
-          console.warn(
-            "[DocxEditor] Revision not found in editor, updating status only:",
-            revisionId,
-          );
-        }
-        setRevisionHistory((prev) =>
-          prev.map((r) =>
-            r.id === revisionId ? { ...r, status: "accepted" } : r,
-          ),
-        );
-        setRevisionActionMsg("Change accepted.");
-        onRevisionStatusChange?.(revisionId, "accepted");
+  // const handleAcceptRevision = useCallback(
+  //   async (revisionId: string) => {
+  //     const editor = containerRef.current?.documentEditor;
+  //     if (!editor) return;
+  //     const target = revisionHistory.find((r) => r.id === revisionId);
+  //     if (!target) {
+  //       setRevisionActionMsg("Revision not found in history.");
+  //       return;
+  //     }
+  //     try {
+  //       const rev = findLiveEditorRevision(target);
+  //       if (rev) {
+  //         rev.accept();
+  //       } else {
+  //         // If the revision isn't in the editor (e.g. already applied on load),
+  //         // still update the status so the UI and Firebase reflect the review.
+  //         console.warn(
+  //           "[DocxEditor] Revision not found in editor, updating status only:",
+  //           revisionId,
+  //         );
+  //       }
+  //       setRevisionHistory((prev) =>
+  //         prev.map((r) =>
+  //           r.id === revisionId ? { ...r, status: "accepted" } : r,
+  //         ),
+  //       );
+  //       setRevisionActionMsg("Change accepted.");
+  //       onRevisionStatusChange?.(revisionId, "accepted");
 
-        // If we modified the editor content, also persist the updated document
-        // so accepted changes are saved in the .docx stored in Firebase.
-        if (rev) {
-          // Remove from pending ref so it isn't re-captured as "pending"
-          pendingRevisionsRef.current = pendingRevisionsRef.current.filter(
-            (r) => r.id !== revisionId,
-          );
-          await handleSave();
-        }
-      } catch (e) {
-        console.error("[DocxEditor] Failed to accept revision:", e);
-        setRevisionActionMsg("Failed to accept change.");
-      }
-      window.setTimeout(() => setRevisionActionMsg(null), 3000);
-    },
-    [revisionHistory, findLiveEditorRevision, onRevisionStatusChange, handleSave],
-  );
+  //       // If we modified the editor content, also persist the updated document
+  //       // so accepted changes are saved in the .docx stored in Firebase.
+  //       if (rev) {
+  //         // Remove from pending ref so it isn't re-captured as "pending"
+  //         pendingRevisionsRef.current = pendingRevisionsRef.current.filter(
+  //           (r) => r.id !== revisionId,
+  //         );
+  //         await handleSave();
+  //       }
+  //     } catch (e) {
+  //       console.error("[DocxEditor] Failed to accept revision:", e);
+  //       setRevisionActionMsg("Failed to accept change.");
+  //     }
+  //     window.setTimeout(() => setRevisionActionMsg(null), 3000);
+  //   },
+  //   [revisionHistory, findLiveEditorRevision, onRevisionStatusChange, handleSave],
+  // );
 
-  const handleRejectRevision = useCallback(
-    async (revisionId: string) => {
-      const editor = containerRef.current?.documentEditor;
-      if (!editor) return;
-      const target = revisionHistory.find((r) => r.id === revisionId);
-      if (!target) {
-        setRevisionActionMsg("Revision not found in history.");
-        return;
-      }
-      try {
-        const rev = findLiveEditorRevision(target);
-        if (rev) {
-          rev.reject();
-        } else {
-          console.warn(
-            "[DocxEditor] Revision not found in editor, updating status only:",
-            revisionId,
-          );
-        }
-        setRevisionHistory((prev) =>
-          prev.map((r) =>
-            r.id === revisionId ? { ...r, status: "rejected" } : r,
-          ),
-        );
-        setRevisionActionMsg("Change rejected.");
-        onRevisionStatusChange?.(revisionId, "rejected");
+  // const handleRejectRevision = useCallback(
+  //   async (revisionId: string) => {
+  //     const editor = containerRef.current?.documentEditor;
+  //     if (!editor) return;
+  //     const target = revisionHistory.find((r) => r.id === revisionId);
+  //     if (!target) {
+  //       setRevisionActionMsg("Revision not found in history.");
+  //       return;
+  //     }
+  //     try {
+  //       const rev = findLiveEditorRevision(target);
+  //       if (rev) {
+  //         rev.reject();
+  //       } else {
+  //         console.warn(
+  //           "[DocxEditor] Revision not found in editor, updating status only:",
+  //           revisionId,
+  //         );
+  //       }
+  //       setRevisionHistory((prev) =>
+  //         prev.map((r) =>
+  //           r.id === revisionId ? { ...r, status: "rejected" } : r,
+  //         ),
+  //       );
+  //       setRevisionActionMsg("Change rejected.");
+  //       onRevisionStatusChange?.(revisionId, "rejected");
 
-        // Persist the updated document so rejected changes are removed
-        // from the .docx stored in Firebase.
-        if (rev) {
-          pendingRevisionsRef.current = pendingRevisionsRef.current.filter(
-            (r) => r.id !== revisionId,
-          );
-          await handleSave();
-        }
-      } catch (e) {
-        console.error("[DocxEditor] Failed to reject revision:", e);
-        setRevisionActionMsg("Failed to reject change.");
-      }
-      window.setTimeout(() => setRevisionActionMsg(null), 3000);
-    },
-    [revisionHistory, findLiveEditorRevision, onRevisionStatusChange, handleSave],
-  );
+  //       // Persist the updated document so rejected changes are removed
+  //       // from the .docx stored in Firebase.
+  //       if (rev) {
+  //         pendingRevisionsRef.current = pendingRevisionsRef.current.filter(
+  //           (r) => r.id !== revisionId,
+  //         );
+  //         await handleSave();
+  //       }
+  //     } catch (e) {
+  //       console.error("[DocxEditor] Failed to reject revision:", e);
+  //       setRevisionActionMsg("Failed to reject change.");
+  //     }
+  //     window.setTimeout(() => setRevisionActionMsg(null), 3000);
+  //   },
+  //   [revisionHistory, findLiveEditorRevision, onRevisionStatusChange, handleSave],
+  // );
 
   // Expose save method via ref-like pattern using a global
   useEffect(() => {
@@ -623,6 +628,7 @@ export default function DocxEditor({
   return (
     <div className="rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
       <DocxEditorHeader
+        
         name={docName}
         loading={loading}
         saving={saving}
@@ -633,11 +639,11 @@ export default function DocxEditor({
         onSave={handleSave}
       />
 
-      {revisionActionMsg && (
+      {/* {revisionActionMsg && (
         <div className="border-b border-gray-200 bg-blue-50 px-4 py-2 text-xs font-medium text-blue-700 dark:border-gray-700 dark:bg-blue-500/10 dark:text-blue-400">
           {revisionActionMsg}
         </div>
-      )}
+      )} */}
 
       <div className="relative" style={{ height }}>
         {loading && (
@@ -685,12 +691,12 @@ export default function DocxEditor({
           </DocumentEditorContainerComponent>
         </div>
       </div>
-
+{/* 
       <RevisionHistoryPanel
         revisions={revisionHistory}
         onAccept={handleAcceptRevision}
         onReject={handleRejectRevision}
-      />
+      /> */}
     </div>
   );
 }
@@ -699,158 +705,158 @@ export default function DocxEditor({
  * Format a revision date string into a readable format like:
  * "August 14, 2026 12:41 PM".
  */
-function formatRevisionDate(dateStr: string): string {
-  const d = new Date(dateStr);
-  if (Number.isNaN(d.getTime())) return dateStr;
-  return d.toLocaleString("en-US", {
-    month: "long",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-  });
-}
+// function formatRevisionDate(dateStr: string): string {
+//   const d = new Date(dateStr);
+//   if (Number.isNaN(d.getTime())) return dateStr;
+//   return d.toLocaleString("en-US", {
+//     month: "long",
+//     day: "numeric",
+//     year: "numeric",
+//     hour: "numeric",
+//     minute: "2-digit",
+//     hour12: true,
+//   });
+// }
 
 /**
  * Clean Syncfusion revision HTML content for readable display.
  * Removes paragraph marks (¶), table track-change wrapper classes,
  * and HTML tags so the actual changed text is shown.
  */
-function cleanRevisionContent(html: string): string {
-  if (!html) return "";
-  try {
-    // Use DOM to parse and extract only visible text
-    const doc = new DOMParser().parseFromString(html, "text/html");
-    // Remove paragraph mark elements
-    doc
-      .querySelectorAll(".e-de-tc-pmark, .e-de-tc-tble-cell")
-      .forEach((el) => el.remove());
-    // Remove empty table elements
-    doc
-      .querySelectorAll("table")
-      .forEach((el) => {
-        if (el.textContent?.trim() === "") el.remove();
-      });
-    return (doc.body.textContent || "").trim();
-  } catch {
-    // Fallback: strip tags via regex if DOMParser fails
-    return html
-      .replace(/<[^>]*>/g, " ")
-      .replace(/\s+/g, " ")
-      .replace(/¶/g, "")
-      .trim();
-  }
-}
+// function cleanRevisionContent(html: string): string {
+//   if (!html) return "";
+//   try {
+//     // Use DOM to parse and extract only visible text
+//     const doc = new DOMParser().parseFromString(html, "text/html");
+//     // Remove paragraph mark elements
+//     doc
+//       .querySelectorAll(".e-de-tc-pmark, .e-de-tc-tble-cell")
+//       .forEach((el) => el.remove());
+//     // Remove empty table elements
+//     doc
+//       .querySelectorAll("table")
+//       .forEach((el) => {
+//         if (el.textContent?.trim() === "") el.remove();
+//       });
+//     return (doc.body.textContent || "").trim();
+//   } catch {
+//     // Fallback: strip tags via regex if DOMParser fails
+//     return html
+//       .replace(/<[^>]*>/g, " ")
+//       .replace(/\s+/g, " ")
+//       .replace(/¶/g, "")
+//       .trim();
+//   }
+// }
 
-function RevisionHistoryPanel({
-  revisions,
-  onAccept,
-  onReject,
-}: {
-  revisions: RevisionMeta[];
-  onAccept: (revisionId: string) => void;
-  onReject: (revisionId: string) => void;
-}) {
-  if (revisions.length === 0) {
-    return (
-      <div className="border-t border-gray-200 px-4 py-3 dark:border-gray-700">
-        <h3 className="mb-1 text-sm font-semibold text-gray-800 dark:text-white">
-          Change History
-        </h3>
-        <p className="text-xs text-gray-500 dark:text-gray-400">
-          No tracked changes yet. Edits made with Track Changes enabled will
-          appear here after saving.
-        </p>
-      </div>
-    );
-  }
+// function RevisionHistoryPanel({
+//   revisions,
+//   onAccept,
+//   onReject,
+// }: {
+//   revisions: RevisionMeta[];
+//   onAccept: (revisionId: string) => void;
+//   onReject: (revisionId: string) => void;
+// }) {
+//   if (revisions.length === 0) {
+//     return (
+//       <div className="border-t border-gray-200 px-4 py-3 dark:border-gray-700">
+//         <h3 className="mb-1 text-sm font-semibold text-gray-800 dark:text-white">
+//           Change History
+//         </h3>
+//         <p className="text-xs text-gray-500 dark:text-gray-400">
+//           No tracked changes yet. Edits made with Track Changes enabled will
+//           appear here after saving.
+//         </p>
+//       </div>
+//     );
+//   }
 
-  return (
-    <div className="border-t border-gray-200 px-4 py-3 dark:border-gray-700">
-      <div className="mb-2 flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-gray-800 dark:text-white">
-          Change History
-        </h3>
-        <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-300">
-          {revisions.length} change{revisions.length !== 1 ? "s" : ""}
-        </span>
-      </div>
+//   return (
+//     <div className="border-t border-gray-200 px-4 py-3 dark:border-gray-700">
+//       <div className="mb-2 flex items-center justify-between">
+//         <h3 className="text-sm font-semibold text-gray-800 dark:text-white">
+//           Change History
+//         </h3>
+//         <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+//           {revisions.length} change{revisions.length !== 1 ? "s" : ""}
+//         </span>
+//       </div>
 
-      <div className="max-h-48 space-y-2 overflow-y-auto">
-        {revisions.map((rev, index) => (
-          <div
-            key={rev.id}
-            className="flex items-start gap-3 rounded-lg border border-gray-200 bg-gray-50 p-2.5 dark:border-gray-700 dark:bg-gray-900"
-          >
-            <span
-              className={`mt-0.5 inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
-                rev.type === "Insertion"
-                  ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400"
-                  : rev.type === "Deletion"
-                    ? "bg-red-100 text-red-700 dark:bg-red-500/10 dark:text-red-400"
-                    : "bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400"
-              }`}
-            >
-              {rev.type === "Insertion"
-                ? "INSERTED"
-                : rev.type === "Deletion"
-                  ? "DELETED"
-                  : rev.type}
-            </span>
+//       <div className="max-h-48 space-y-2 overflow-y-auto">
+//         {revisions.map((rev, index) => (
+//           <div
+//             key={rev.id}
+//             className="flex items-start gap-3 rounded-lg border border-gray-200 bg-gray-50 p-2.5 dark:border-gray-700 dark:bg-gray-900"
+//           >
+//             <span
+//               className={`mt-0.5 inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+//                 rev.type === "Insertion"
+//                   ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400"
+//                   : rev.type === "Deletion"
+//                     ? "bg-red-100 text-red-700 dark:bg-red-500/10 dark:text-red-400"
+//                     : "bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400"
+//               }`}
+//             >
+//               {rev.type === "Insertion"
+//                 ? "INSERTED"
+//                 : rev.type === "Deletion"
+//                   ? "DELETED"
+//                   : rev.type}
+//             </span>
 
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2 text-xs">
-                <span className="font-medium text-gray-700 dark:text-gray-300">
-                  {rev.author}
-                </span>
-                <span className="text-gray-400">{formatRevisionDate(rev.date)}</span>
-                <span
-                  className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
-                    rev.status === "accepted"
-                      ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400"
-                      : rev.status === "rejected"
-                        ? "bg-red-100 text-red-700 dark:bg-red-500/10 dark:text-red-400"
-                        : "bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400"
-                  }`}
-                >
-                  {rev.status}
-                </span>
-              </div>
-              <div className="mt-1 text-xs text-gray-600 dark:text-gray-400">
-                {cleanRevisionContent(rev.content)}
-              </div>
-              <div className="mt-1 text-[10px] font-medium text-gray-400 dark:text-gray-500">
-                Changes {index + 1} of {revisions.length}
-              </div>
-            </div>
+//             <div className="min-w-0 flex-1">
+//               <div className="flex items-center gap-2 text-xs">
+//                 <span className="font-medium text-gray-700 dark:text-gray-300">
+//                   {rev.author}
+//                 </span>
+//                 <span className="text-gray-400">{formatRevisionDate(rev.date)}</span>
+//                 <span
+//                   className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
+//                     rev.status === "accepted"
+//                       ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400"
+//                       : rev.status === "rejected"
+//                         ? "bg-red-100 text-red-700 dark:bg-red-500/10 dark:text-red-400"
+//                         : "bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400"
+//                   }`}
+//                 >
+//                   {rev.status}
+//                 </span>
+//               </div>
+//               <div className="mt-1 text-xs text-gray-600 dark:text-gray-400">
+//                 {cleanRevisionContent(rev.content)}
+//               </div>
+//               <div className="mt-1 text-[10px] font-medium text-gray-400 dark:text-gray-500">
+//                 Changes {index + 1} of {revisions.length}
+//               </div>
+//             </div>
 
-            {rev.status === "pending" && (
-              <div className="flex shrink-0 items-center gap-1">
-                <button
-                  type="button"
-                  onClick={() => onAccept(rev.id)}
-                  className="rounded-md bg-emerald-500 px-2 py-1 text-[10px] font-semibold text-white transition hover:bg-emerald-600"
-                  title="Accept change"
-                >
-                  ✓ Accept
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onReject(rev.id)}
-                  className="rounded-md bg-red-500 px-2 py-1 text-[10px] font-semibold text-white transition hover:bg-red-600"
-                  title="Reject change"
-                >
-                  ✗ Reject
-                </button>
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
+//             {rev.status === "pending" && (
+//               <div className="flex shrink-0 items-center gap-1">
+//                 <button
+//                   type="button"
+//                   onClick={() => onAccept(rev.id)}
+//                   className="rounded-md bg-emerald-500 px-2 py-1 text-[10px] font-semibold text-white transition hover:bg-emerald-600"
+//                   title="Accept change"
+//                 >
+//                   ✓ Accept
+//                 </button>
+//                 <button
+//                   type="button"
+//                   onClick={() => onReject(rev.id)}
+//                   className="rounded-md bg-red-500 px-2 py-1 text-[10px] font-semibold text-white transition hover:bg-red-600"
+//                   title="Reject change"
+//                 >
+//                   ✗ Reject
+//                 </button>
+//               </div>
+//             )}
+//           </div>
+//         ))}
+//       </div>
+//     </div>
+//   );
+// }
 
 function DocxEditorHeader({
   name,
