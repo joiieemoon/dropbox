@@ -7,6 +7,8 @@
 import { useCallback, useMemo, useState } from "react";
 import type { Document, Recipient, TrackingLink } from "../../types";
 import { shareDocument } from "../../api/documentsApi";
+import { toastSuccess, toastError } from "../../../../components/common/toast/toast";
+import { copyToClipboard } from "../../../../utils/clipboard";
 
 interface ShareDocumentPanelProps {
   /** The document that was just uploaded. */
@@ -34,7 +36,6 @@ export default function ShareDocumentPanel({
   const [shareError, setShareError] = useState<string | null>(null);
   const [shareSuccess, setShareSuccess] = useState<string | null>(null);
   const [generatedLink, setGeneratedLink] = useState<TrackingLink | null>(null);
-  const [copied, setCopied] = useState(false);
 
   // Recipients who have NOT yet been shared with this document,
   // and exclude the current user (owner) from the dropdown.
@@ -65,14 +66,18 @@ export default function ShareDocumentPanel({
       onLinkGenerated(link);
       setGeneratedLink(link);
       setShareSuccess(`Document shared as ${shareRole} successfully! Tracking link generated.`);
+      toastSuccess(
+        `Shared "${document.name}" as ${shareRole} with ${recipients.find((r) => r.id === selectedRecipientId)?.username ?? "user"}!`,
+      );
       setSelectedRecipientId("");
       setShareRole("viewer");
     } catch {
       setShareError("Failed to share the document. Please try again.");
+      toastError("Failed to share the document. Please try again.");
     } finally {
       setSharing(false);
     }
-  }, [document, selectedRecipientId, shareRole, onDocumentUpdated, onLinkGenerated]);
+  }, [document, selectedRecipientId, shareRole, recipients, onDocumentUpdated, onLinkGenerated]);
 
   return (
     <div className="mt-4 rounded-xl border border-brand-200 bg-brand-50/50 p-4 dark:border-brand-500/30 dark:bg-brand-500/10">
@@ -131,18 +136,14 @@ export default function ShareDocumentPanel({
           </code>
           <button
             type="button"
-            onClick={async () => {
-              try {
-                await navigator.clipboard.writeText(generatedLink.url);
-                setCopied(true);
-                setTimeout(() => setCopied(false), 2000);
-              } catch {
-                window.prompt("Copy this link:", generatedLink.url);
-              }
+            onClick={() => {
+              // Copy silently — no popups or prompts.
+              copyToClipboard(generatedLink.url);
+              toastSuccess("Tracking link copied to clipboard!");
             }}
             className="shrink-0 rounded-lg bg-brand-500 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-brand-600"
           >
-            {copied ? "Copied!" : "Copy"}
+            Copy
           </button>
         </div>
       )}

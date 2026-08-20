@@ -46,7 +46,7 @@ export default function SignUpForm() {
       signup({
         email: values.email,
         password: values.password,
-        name: values.name,
+        name: `${values.firstName} ${values.lastName}`.trim(),
         // avatar: values.avatar,
         // role: values.role,
       });

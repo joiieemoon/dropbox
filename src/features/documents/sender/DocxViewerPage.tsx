@@ -6,6 +6,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { DeleteConfirmationModal } from "../../../components/ui/confirmation-modal/DeleteConfirmationModal";
 import { useNavigate } from "react-router-dom";
+import { toastSuccess, toastError } from "../../../components/common/toast/toast";
+import { copyToClipboard } from "../../../utils/clipboard";
 import DocxDropzone from "./components/DocxDropzone";
 import DocxViewer from "./components/DocxViewer";
 import ShareDocumentPanel from "./components/ShareDocumentPanel";
@@ -114,9 +116,17 @@ export default function DocxViewerPage() {
       // Close the preview after saving to Firebase.
       setSelectedFile(null);
       setDocxDataUrl(null);
+      toastSuccess(
+        `${selectedFile.name} (${(selectedFile.size / 1_000_000).toFixed(1)} MB) uploaded successfully!`,
+      );
     } catch (e) {
       console.error("[DocxViewerPage] Failed to save to Firebase:", e);
       setError(
+        e instanceof Error
+          ? e.message
+          : "Failed to save the document to Firebase. Please try again.",
+      );
+      toastError(
         e instanceof Error
           ? e.message
           : "Failed to save the document to Firebase. Please try again.",
@@ -157,12 +167,10 @@ export default function DocxViewerPage() {
     setLinks((prev) => [link, ...prev]);
   }, []);
 
-  const handleCopyLink = useCallback(async (url: string) => {
-    try {
-      await navigator.clipboard.writeText(url);
-    } catch {
-      window.prompt("Copy this link:", url);
-    }
+  const handleCopyLink = useCallback((url: string) => {
+    // Copy silently — no popups or prompts.
+    copyToClipboard(url);
+    toastSuccess("Tracking link copied to clipboard!");
   }, []);
 
   const handleShareDocument = useCallback(async () => {
@@ -187,6 +195,9 @@ export default function DocxViewerPage() {
       setShareSuccess(
         `Shared as ${shareRole} with ${recipients.find((r) => r.id === shareRecipientId)?.username ?? "user"}! Tracking link generated.`,
       );
+      toastSuccess(
+        `Shared "${shareDoc.name}" as ${shareRole} with ${recipients.find((r) => r.id === shareRecipientId)?.username ?? "user"}!`,
+      );
       setShareRecipientId("");
       setShareRole("viewer");
       setTimeout(() => {
@@ -195,6 +206,7 @@ export default function DocxViewerPage() {
       }, 1200);
     } catch {
       setShareError("Failed to share the document. Please try again.");
+      toastError("Failed to share the document. Please try again.");
     } finally {
       setSharing(false);
     }
@@ -221,9 +233,10 @@ export default function DocxViewerPage() {
               : d,
           ),
         );
+        toastSuccess("Access revoked successfully!");
       } catch (error) {
         console.error("Failed to revoke access:", error);
-        alert("Failed to revoke access. Please try again.");
+        toastError("Failed to revoke access. Please try again.");
       }
     },
     [],
@@ -685,10 +698,11 @@ export default function DocxViewerPage() {
                 setDocxDocs((prev) =>
                   prev.filter((d) => d.id !== deleteDoc.id),
                 );
+                toastSuccess(`"${deleteDoc.name}" deleted successfully!`);
               })
               .catch((error) => {
                 console.error("Failed to delete document:", error);
-                alert("Failed to delete document. Please try again.");
+                toastError("Failed to delete document. Please try again.");
               })
               .finally(() => {
                 setDeleteDoc(null);

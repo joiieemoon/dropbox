@@ -53,3 +53,9 @@ deploy-rules.sh
 
 *storybook.log
 storybook-static
+
+# AI-DLC workflow rules & documentation (internal workflow - not for public repo)
+.clinerules/
+.aidlc-rule-details/
+aidlc-docs/
+.kiro/

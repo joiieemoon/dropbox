@@ -5,7 +5,10 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import toast from "react-hot-toast";
 import { DeleteConfirmationModal } from "../../../components/ui/confirmation-modal/DeleteConfirmationModal";
+import { dismissToast, toastSuccess, toastError } from "../../../components/common/toast/toast";
+import { copyToClipboard } from "../../../utils/clipboard";
 import PdfDropzone from "./components/PdfDropzone";
 import ShareDocumentPanel from "./components/ShareDocumentPanel";
 import {
@@ -22,6 +25,13 @@ import { getViewerIdentity, isDocumentOwner } from "../utils/userIdentity";
 import { useAppSelector } from "../../../store/hooks";
 import { selectUser } from "../../../store/selectors";
 import type { Document, Recipient, TrackingLink } from "../types";
+
+/** Format a byte count into a human-readable size string (e.g. "2.4 MB"). */
+function formatFileSize(bytes: number): string {
+  if (bytes >= 1_000_000) return `${(bytes / 1_000_000).toFixed(1)} MB`;
+  if (bytes >= 1_000) return `${(bytes / 1_000).toFixed(1)} KB`;
+  return `${bytes} B`;
+}
 
 export default function SenderDashboard() {
   const navigate = useNavigate();
@@ -69,6 +79,9 @@ export default function SenderDashboard() {
       setShareSuccess(
         `Shared with ${recipients.find((r) => r.id === shareRecipientId)?.username ?? "user"}!`,
       );
+      toastSuccess(
+        `Shared "${shareDoc.name}" with ${recipients.find((r) => r.id === shareRecipientId)?.username ?? "user"}!`,
+      );
       setShareRecipientId("");
       setTimeout(() => {
         setShareDoc(null);
@@ -76,6 +89,7 @@ export default function SenderDashboard() {
       }, 1200);
     } catch {
       setShareError("Failed to share the document. Please try again.");
+      toastError("Failed to share the document. Please try again.");
     } finally {
       setSharing(false);
     }
@@ -125,6 +139,35 @@ export default function SenderDashboard() {
         });
         setDocuments((prev) => [doc, ...prev]);
         setJustUploadedDoc(doc);
+
+        // Show a success toast with the file name, size, and a close button.
+        const message = `${file.name} (${formatFileSize(file.size)}) uploaded successfully`;
+        const toastId = toast.success(
+          <div className="flex items-center gap-2">
+            <span>{message}</span>
+            <button
+              type="button"
+              onClick={() => dismissToast(toastId)}
+              aria-label="Dismiss notification"
+              className="ml-1 rounded-full p-0.5 text-gray-400 transition hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-700 dark:hover:text-gray-300"
+            >
+              <svg
+                className="h-3.5 w-3.5"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M6 18L18 6M6 6l12 12"
+                />
+              </svg>
+            </button>
+          </div>,
+          { duration: 4000 },
+        );
       } catch {
         setUploadError("Failed to upload the PDF. Please try again.");
       } finally {
@@ -145,12 +188,10 @@ export default function SenderDashboard() {
     setLinks((prev) => [link, ...prev]);
   }, []);
 
-  const handleCopyLink = useCallback(async (url: string) => {
-    try {
-      await navigator.clipboard.writeText(url);
-    } catch {
-      window.prompt("Copy this link:", url);
-    }
+  const handleCopyLink = useCallback((url: string) => {
+    // Copy silently — no popups or prompts.
+    copyToClipboard(url);
+    toastSuccess("Tracking link copied to clipboard!");
   }, []);
 
   const handleDeleteDocument = useCallback((doc: Document) => {
@@ -164,9 +205,10 @@ export default function SenderDashboard() {
       await deleteDocument(deleteDoc.id);
       setDocuments((prev) => prev.filter((d) => d.id !== deleteDoc.id));
       setDeleteDoc(null);
+      toastSuccess(`"${deleteDoc.name}" deleted successfully!`);
     } catch (error) {
       console.error("Failed to delete document:", error);
-      alert("Failed to delete document. Please try again.");
+      toastError("Failed to delete document. Please try again.");
     }
   }, [deleteDoc]);
 
@@ -195,9 +237,10 @@ export default function SenderDashboard() {
         ),
       );
       setRevokeDoc(null);
+      toastSuccess("Access revoked successfully!");
     } catch (error) {
       console.error("Failed to revoke access:", error);
-      alert("Failed to revoke access. Please try again.");
+      toastError("Failed to revoke access. Please try again.");
     }
   }, [revokeDoc]);
 

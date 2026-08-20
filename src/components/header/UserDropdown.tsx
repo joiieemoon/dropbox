@@ -30,8 +30,8 @@ export default function UserDropdown() {
     logout();
   }
 
-  // Show username (matches the auth system's login identifier)
-  const displayName = user?.username || "Guest";
+  // Show username with fallback chain: firstName → username → name → Guest
+  const displayName = user?.firstName || user?.username || user?.name || "Guest";
   const displayEmail = user?.email || "guest@example.com";
   const displayImage = user?.image || "/images/user/owner.png";
 
@@ -110,6 +110,7 @@ export default function UserDropdown() {
         <button
           onClick={handleSignOut}
           disabled={isPending}
+          aria-label="Sign out"
           className="flex items-center gap-3 px-3 py-2 mt-3 font-medium text-gray-700 rounded-lg group text-theme-sm hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-white/5 dark:hover:text-gray-300"
         >
           <svg

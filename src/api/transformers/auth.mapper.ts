@@ -41,7 +41,7 @@ export function mapSignupResponse(
     email: response.email,
     firstName: response.name,
     lastName: "",
-    username: "",
+    username: response.name || "",
     image: response.avatar,
     name: response.name,
     creationAt: response.creationAt,
