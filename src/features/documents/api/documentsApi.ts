@@ -87,6 +87,7 @@ export async function registerDocument(
     uploadedBy?: string;
     uploaderRecipientId?: string;
     uploader?: Pick<Recipient, "id" | "username" | "email" | "name">;
+    onProgress?: (percent: number) => void;
   },
 ): Promise<Document> {
   const uid = auth.currentUser?.uid;
@@ -95,7 +96,7 @@ export async function registerDocument(
   // Convert PDF file to base64 data URL for Firestore storage.
   let dataUrl = "";
   if (input.file) {
-    dataUrl = await readFileAsDataUrl(input.file);
+    dataUrl = await readFileAsDataUrl(input.file, input.onProgress);
   }
 
   // Create the Firestore document with the PDF data.
@@ -135,12 +136,20 @@ export async function registerDocument(
   };
 }
 
-/** Read a File as a base64 data URL. */
-function readFileAsDataUrl(file: File): Promise<string> {
+/** Read a File as a base64 data URL, reporting progress 0-100. */
+function readFileAsDataUrl(
+  file: File,
+  onProgress?: (percent: number) => void,
+): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(reader.result as string);
     reader.onerror = () => reject(reader.error);
+    reader.onprogress = (e) => {
+      if (e.lengthComputable && onProgress) {
+        onProgress(Math.round((e.loaded / e.total) * 100));
+      }
+    };
     reader.readAsDataURL(file);
   });
 }
@@ -157,6 +166,7 @@ function readFileAsDataUrl(file: File): Promise<string> {
 export async function registerEditableDocument(
   file: File,
   pageCount = 1,
+  onProgress?: (percent: number) => void,
 ): Promise<Document> {
   const uid = auth.currentUser?.uid;
   if (!uid) throw new Error("You must be signed in to upload documents");
@@ -172,7 +182,7 @@ export async function registerEditableDocument(
   }
 
   // Convert .docx file to base64 data URL for Firestore storage.
-  const dataUrl = await readFileAsDataUrl(file);
+  const dataUrl = await readFileAsDataUrl(file, onProgress);
 
   // Create the Firestore document.
   const docRef = doc(collection(db, "documents"));

@@ -7,6 +7,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { DeleteConfirmationModal } from "../../../components/ui/confirmation-modal/DeleteConfirmationModal";
 import { useNavigate } from "react-router-dom";
 import { toastSuccess, toastError } from "../../../components/common/toast/toast";
+import UploadProgressToast, {
+  type UploadProgressStatus,
+} from "../../../components/common/upload-progress/UploadProgressToast";
 import { copyToClipboard } from "../../../utils/clipboard";
 import DocxDropzone from "./components/DocxDropzone";
 import DocxViewer from "./components/DocxViewer";
@@ -46,6 +49,12 @@ export default function DocxViewerPage() {
   const [loadingDocs, setLoadingDocs] = useState(true);
   const [docxDataUrl, setDocxDataUrl] = useState<string | null>(null);
   const [justUploadedDoc, setJustUploadedDoc] = useState<Document | null>(null);
+  // Upload progress toast state.
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadStatus, setUploadStatus] = useState<UploadProgressStatus>("uploading");
+  const [uploadFileName, setUploadFileName] = useState("");
+  const [showUploadToast, setShowUploadToast] = useState(false);
+  const [uploadErrorMessage, setUploadErrorMessage] = useState<string | null>(null);
 
   // Recipients & tracking links for sharing
   const [recipients, setRecipients] = useState<Recipient[]>([]);
@@ -55,6 +64,7 @@ export default function DocxViewerPage() {
   const [shareDoc, setShareDoc] = useState<Document | null>(null);
   // Delete confirmation state
   const [deleteDoc, setDeleteDoc] = useState<Document | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [shareRecipientId, setShareRecipientId] = useState("");
   const [shareRole, setShareRole] = useState<"viewer" | "editor">("viewer");
   const [sharing, setSharing] = useState(false);
@@ -104,12 +114,40 @@ export default function DocxViewerPage() {
     // Open the delete confirmation modal
     setDeleteDoc(doc);
   }, []);
+
+  const handleConfirmDelete = useCallback(async () => {
+    if (!deleteDoc || deleting) return;
+    setDeleting(true);
+    try {
+      await deleteDocument(deleteDoc.id);
+      setDocxDocs((prev) => prev.filter((d) => d.id !== deleteDoc.id));
+      toastSuccess(`"${deleteDoc.name}" deleted successfully!`);
+    } catch (error) {
+      console.error("Failed to delete document:", error);
+      toastError("Failed to delete document. Please try again.");
+    } finally {
+      setDeleteDoc(null);
+      setDeleting(false);
+    }
+  }, [deleteDoc, deleting]);
   const handleSaveToFirebase = useCallback(async () => {
     if (!selectedFile) return;
     setSaving(true);
     setError(null);
+    // Show the upload progress toast.
+    setUploadProgress(0);
+    setUploadStatus("uploading");
+    setUploadFileName(selectedFile.name);
+    setUploadErrorMessage(null);
+    setShowUploadToast(true);
     try {
-      const doc = await registerEditableDocument(selectedFile);
+      const doc = await registerEditableDocument(
+        selectedFile,
+        1,
+        (percent) => setUploadProgress(percent),
+      );
+      setUploadStatus("success");
+      setUploadProgress(100);
       setSaved(true);
       setJustUploadedDoc(doc);
       await loadDocxDocuments();
@@ -122,6 +160,12 @@ export default function DocxViewerPage() {
     } catch (e) {
       console.error("[DocxViewerPage] Failed to save to Firebase:", e);
       setError(
+        e instanceof Error
+          ? e.message
+          : "Failed to save the document to Firebase. Please try again.",
+      );
+      setUploadStatus("error");
+      setUploadErrorMessage(
         e instanceof Error
           ? e.message
           : "Failed to save the document to Firebase. Please try again.",
@@ -653,7 +697,7 @@ export default function DocxViewerPage() {
                                 type="button"
                                 onClick={() => handleDeleteDocument(doc)}
                                 title="Delete document"
-                                className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-300 text-gray-600 transition hover:border-red-400 hover:bg-red-50 hover:text-gray-700 dark:border-gray-800 dark:text-red-400 dark:hover:border-red-600 dark:hover:bg-red-900/20 dark:hover:text-red-300"
+                                className="delete-btn-wiggle flex h-8 w-8 items-center justify-center rounded-lg border border-gray-300 text-gray-600 transition hover:border-red-400 hover:bg-red-50 hover:text-gray-700 dark:border-gray-800 dark:text-red-400 dark:hover:border-red-600 dark:hover:bg-red-900/20 dark:hover:text-red-300"
                               >
                                 <svg
                                   className="h-4 w-4"
@@ -685,29 +729,27 @@ export default function DocxViewerPage() {
         </div>
       </div>
 
+      {/* Upload Progress Toast (bottom-right corner) */}
+      {showUploadToast && (
+        <UploadProgressToast
+          fileName={uploadFileName}
+          docType="docx"
+          progress={uploadProgress}
+          status={uploadStatus}
+          errorMessage={uploadErrorMessage}
+          onDismiss={() => setShowUploadToast(false)}
+        />
+      )}
+
       {/* Delete Confirmation Modal */}
       {deleteDoc && (
         <DeleteConfirmationModal
           isOpen={!!deleteDoc}
           title="Delete Document"
           message={`Are you sure you want to delete "${deleteDoc.name}"? This action cannot be undone.`}
+          loading={deleting}
           onClose={() => setDeleteDoc(null)}
-          onConfirm={() => {
-            void deleteDocument(deleteDoc.id)
-              .then(() => {
-                setDocxDocs((prev) =>
-                  prev.filter((d) => d.id !== deleteDoc.id),
-                );
-                toastSuccess(`"${deleteDoc.name}" deleted successfully!`);
-              })
-              .catch((error) => {
-                console.error("Failed to delete document:", error);
-                toastError("Failed to delete document. Please try again.");
-              })
-              .finally(() => {
-                setDeleteDoc(null);
-              });
-          }}
+          onConfirm={handleConfirmDelete}
         />
       )}
 

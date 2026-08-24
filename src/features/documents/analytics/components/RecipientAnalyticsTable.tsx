@@ -50,6 +50,18 @@ interface PageDwellData {
   seconds: number;
 }
 
+// Pure helpers moved to module scope so they aren't rebuilt per render
+const formatDuration = (seconds: number): string => {
+  if (seconds <= 0) return "0s";
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return m > 0 ? `${m}m ${s}s` : `${s}s`;
+};
+
+const getMaxSeconds = (dwellData: PageDwellData[]): number => {
+  return Math.max(...dwellData.map((d) => d.seconds), 1);
+};
+
 export default function RecipientAnalyticsTable({
   documentId,
   recipients,
@@ -139,17 +151,6 @@ export default function RecipientAnalyticsTable({
     return Array.from(aggregated.entries())
       .map(([page, seconds]) => ({ page, seconds }))
       .sort((a, b) => a.page - b.page);
-  };
-
-  const formatDuration = (seconds: number): string => {
-    if (seconds <= 0) return "0s";
-    const m = Math.floor(seconds / 60);
-    const s = seconds % 60;
-    return m > 0 ? `${m}m ${s}s` : `${s}s`;
-  };
-
-  const getMaxSeconds = (dwellData: PageDwellData[]): number => {
-    return Math.max(...dwellData.map((d) => d.seconds), 1);
   };
 
   if (recipients.length === 0) {

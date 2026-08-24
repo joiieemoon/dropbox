@@ -825,3 +825,89 @@ span.flatpickr-weekday,
 .docx-viewer-container [style*="overflow: auto"]::-webkit-scrollbar {
   display: none !important;
 }
+/* ================================================================
+   MoonDoc micro-animations
+   ----------------------------------------------------------------
+   Keeps the UI feeling alive with tasteful, non-intrusive motion:
+   - Sidebar tab switch: smooth color transition + "pop-in" on the
+     newly active item.
+   - Delete buttons: a short "wiggle" on hover to signal danger.
+   Animations opt out for users who prefer reduced motion.
+================================================================ */
+
+/* Sidebar tab-switch: when the active nav item changes, the background
+   and text color ease between states instead of snapping. */
+.menu-item {
+  transition: background-color 0.28s ease, color 0.28s ease;
+}
+
+/* The item that becomes active slides/scales gently into place. */
+.menu-item-active {
+  animation: moondoc-menu-pop 0.35s ease-out;
+}
+
+/* Delete/destructive action buttons shake slightly on hover. */
+.delete-btn-wiggle:hover {
+  animation: moondoc-delete-wiggle 0.45s ease-in-out;
+}
+
+@keyframes moondoc-menu-pop {
+  0% {
+    opacity: 0.45;
+    transform: scale(0.96);
+  }
+  60% {
+    opacity: 0.85;
+    transform: scale(1.02);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes moondoc-delete-wiggle {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  15% {
+    transform: rotate(-14deg);
+  }
+  30% {
+    transform: rotate(12deg);
+  }
+  45% {
+    transform: rotate(-9deg);
+  }
+  60% {
+    transform: rotate(7deg);
+  }
+  75% {
+    transform: rotate(-4deg);
+  }
+  90% {
+    transform: rotate(3deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .menu-item-active,
+  .delete-btn-wiggle:hover {
+    animation: none;
+  }
+}
+
+/* ================================================================
+   Wave-style theme transition (View Transitions API)
+   ----------------------------------------------------------------
+   The expanding-circle reveal is driven by WAAPI from
+   src/utils/themeTransition.ts (::view-transition-new(root)).
+   Here we only disable the browser's default cross-fade so the
+   circle reveal is the sole transition between snapshots.
+================================================================ */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}

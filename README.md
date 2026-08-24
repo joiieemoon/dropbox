@@ -184,9 +184,7 @@ Document Stored (Firebase Storage + Firestore)
 Share with Recipients ──► Generate Tracking Links (/v/:token)
       │                              │
       ▼                              ▼
-Recipient Opens Link ──► Secure Viewer (email/OTP gate)
-      │
-      ▼
+
 Beacon Telemetry (page dwell, interactions, completion)
       │
       ▼
@@ -199,10 +197,10 @@ Analytics Dashboard (open rate, duration, engagement)
 /v/:token
     │
     ▼
-Verify Token ──► Login Required? ──► Email Required? ──► OTP Required? ──► Granted
-    │                    │                    │                  │
-    ▼                    ▼                    ▼                  ▼
-  Denied            Sign In / Sign Up     Enter Email        Verify OTP
+Verify Token ──► Login Required? ──► Email Required?  ──► Granted
+    │                    │                    │                  
+    ▼                    ▼                    ▼                  
+  Denied            Sign In / Sign Up     Enter Email        
 ```
 
 ---

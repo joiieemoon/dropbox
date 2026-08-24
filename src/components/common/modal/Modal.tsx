@@ -74,14 +74,16 @@ export const Modal: React.FC<ModalProps> = ({
     : `relative w-full rounded-3xl bg-white dark:bg-gray-900 ${maxWidthClass} m-4`;
 
   // Base wrapper classes: always present to keep DOM mounted
-  const wrapperClasses = keepMounted && !isOpen
-    ? "fixed inset-0 flex items-center justify-center overflow-y-auto modal z-99999 invisible pointer-events-none opacity-0"
-    : "fixed inset-0 flex items-center justify-center overflow-y-auto modal z-99999";
+  const wrapperClasses =
+    keepMounted && !isOpen
+      ? "fixed inset-0 flex items-center justify-center overflow-y-auto modal z-9999999999 invisible pointer-events-none opacity-0"
+      : "fixed inset-0 flex items-center justify-center overflow-y-auto modal z-99999999999";
 
   // Backdrop visibility
-  const backdropClasses = keepMounted && !isOpen
-    ? "fixed inset-0 h-full w-full bg-gray-400/50 backdrop-blur-[32px] invisible opacity-0"
-    : "fixed inset-0 h-full w-full bg-gray-400/50 backdrop-blur-[32px]";
+  const backdropClasses =
+    keepMounted && !isOpen
+      ? "fixed inset-0 h-full w-full bg-gray-400/50 backdrop-blur-[32px] invisible opacity-0"
+      : "fixed inset-0 h-full w-full bg-gray-400/50 backdrop-blur-[32px]";
 
   return (
     <div
@@ -107,7 +109,7 @@ export const Modal: React.FC<ModalProps> = ({
             aria-label="Close modal"
             onClick={handleClose}
             disabled={loading}
-            className="absolute right-3 top-3 z-999 flex h-8 w-8 items-center justify-center rounded-full bg-gray-100 text-gray-400 transition-colors hover:bg-gray-200 hover:text-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
+            className="absolute right-3 top-3 z-9999999999999999 flex h-8 w-8 items-center justify-center rounded-full bg-gray-100 text-gray-400 transition-colors hover:bg-gray-200 hover:text-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <svg
               width="16"

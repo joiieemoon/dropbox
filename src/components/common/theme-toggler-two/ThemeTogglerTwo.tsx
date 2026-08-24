@@ -1,10 +1,12 @@
 import { useTheme } from "../../../context/ThemeContext";
+import { toggleThemeWithWave } from "../../../utils/themeTransition";
 
 export default function ThemeTogglerTwo() {
   const { toggleTheme } = useTheme();
   return (
     <button
-      onClick={toggleTheme}
+      onClick={(e) => toggleThemeWithWave(toggleTheme, e)}
+      aria-label="Toggle dark mode"
       className="inline-flex items-center justify-center text-white transition-colors rounded-full size-14 bg-brand-500 hover:bg-brand-600"
     >
       <svg

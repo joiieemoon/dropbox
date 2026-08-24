@@ -18,6 +18,13 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({
   const [theme, setTheme] = useState<Theme>("light");
   const [isInitialized, setIsInitialized] = useState(false);
 
+  // Apply/remove the `dark` class on <html>. Kept as a plain function so it
+  // can also be called synchronously inside toggleTheme — required for the
+  // View Transitions API wave (the snapshot must already show the new theme).
+  const applyThemeClass = (next: Theme) => {
+    document.documentElement.classList.toggle("dark", next === "dark");
+  };
+
   useEffect(() => {
     // This code will only run on the client side
     const savedTheme = localStorage.getItem("theme") as Theme | null;
@@ -30,16 +37,16 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({
   useEffect(() => {
     if (isInitialized) {
       localStorage.setItem("theme", theme);
-      if (theme === "dark") {
-        document.documentElement.classList.add("dark");
-      } else {
-        document.documentElement.classList.remove("dark");
-      }
+      applyThemeClass(theme);
     }
   }, [theme, isInitialized]);
 
   const toggleTheme = () => {
-    setTheme((prevTheme) => (prevTheme === "light" ? "dark" : "light"));
+    const next: Theme = theme === "light" ? "dark" : "light";
+    // Flip the class synchronously so a startViewTransition snapshot taken
+    // right after this call reflects the new theme (wave reveal).
+    applyThemeClass(next);
+    setTheme(next);
   };
 
   return (

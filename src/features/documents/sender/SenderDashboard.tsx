@@ -8,6 +8,9 @@ import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 import { DeleteConfirmationModal } from "../../../components/ui/confirmation-modal/DeleteConfirmationModal";
 import { dismissToast, toastSuccess, toastError } from "../../../components/common/toast/toast";
+import UploadProgressToast, {
+  type UploadProgressStatus,
+} from "../../../components/common/upload-progress/UploadProgressToast";
 import { copyToClipboard } from "../../../utils/clipboard";
 import PdfDropzone from "./components/PdfDropzone";
 import ShareDocumentPanel from "./components/ShareDocumentPanel";
@@ -45,6 +48,13 @@ export default function SenderDashboard() {
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [justUploadedDoc, setJustUploadedDoc] = useState<Document | null>(null);
+  // Upload progress toast state.
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadStatus, setUploadStatus] = useState<UploadProgressStatus>("uploading");
+  const [uploadFileName, setUploadFileName] = useState("");
+  const [uploadDocType, setUploadDocType] = useState<"pdf" | "docx">("pdf");
+  const [showUploadToast, setShowUploadToast] = useState(false);
+  const [uploadErrorMessage, setUploadErrorMessage] = useState<string | null>(null);
 
   // Share modal state (add user to an already-uploaded document).
   const [shareDoc, setShareDoc] = useState<Document | null>(null);
@@ -55,6 +65,7 @@ export default function SenderDashboard() {
 
   // Delete confirmation state.
   const [deleteDoc, setDeleteDoc] = useState<Document | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   // Revoke access confirmation state.
   const [revokeDoc, setRevokeDoc] = useState<{
@@ -120,6 +131,13 @@ export default function SenderDashboard() {
       setUploading(true);
       setUploadError(null);
       setJustUploadedDoc(null);
+      // Show the upload progress toast.
+      setUploadProgress(0);
+      setUploadStatus("uploading");
+      setUploadFileName(file.name);
+      setUploadDocType("pdf");
+      setUploadErrorMessage(null);
+      setShowUploadToast(true);
       try {
         const pageCount = await getPdfPageCount(file);
         const doc = await registerDocument({
@@ -136,7 +154,10 @@ export default function SenderDashboard() {
             email: user.email,
             name: `${user.firstName} ${user.lastName}`.trim() || user.username,
           },
+          onProgress: (percent) => setUploadProgress(percent),
         });
+        setUploadStatus("success");
+        setUploadProgress(100);
         setDocuments((prev) => [doc, ...prev]);
         setJustUploadedDoc(doc);
 
@@ -170,6 +191,8 @@ export default function SenderDashboard() {
         );
       } catch {
         setUploadError("Failed to upload the PDF. Please try again.");
+        setUploadStatus("error");
+        setUploadErrorMessage("Failed to upload the PDF. Please try again.");
       } finally {
         setUploading(false);
       }
@@ -200,7 +223,8 @@ export default function SenderDashboard() {
   }, []);
 
   const handleConfirmDelete = useCallback(async () => {
-    if (!deleteDoc) return;
+    if (!deleteDoc || deleting) return;
+    setDeleting(true);
     try {
       await deleteDocument(deleteDoc.id);
       setDocuments((prev) => prev.filter((d) => d.id !== deleteDoc.id));
@@ -209,8 +233,10 @@ export default function SenderDashboard() {
     } catch (error) {
       console.error("Failed to delete document:", error);
       toastError("Failed to delete document. Please try again.");
+    } finally {
+      setDeleting(false);
     }
-  }, [deleteDoc]);
+  }, [deleteDoc, deleting]);
 
   const handleRevokeAccess = useCallback(
     (doc: Document, recipientId: string) => {
@@ -579,7 +605,7 @@ export default function SenderDashboard() {
                                 type="button"
                                 onClick={() => handleDeleteDocument(doc)}
                                 title="Delete document"
-                                className="flex h-8 w-8 items-center justify-center rounded-lg border border-red-200 text-red-600 transition hover:border-red-400 hover:bg-red-50 hover:text-red-700 dark:border-red-800 dark:text-red-400 dark:hover:border-red-600 dark:hover:bg-red-900/20 dark:hover:text-red-300"
+                                className="delete-btn-wiggle flex h-8 w-8 items-center justify-center rounded-lg border border-red-200 text-red-600 transition hover:border-red-400 hover:bg-red-50 hover:text-red-700 dark:border-red-800 dark:text-red-400 dark:hover:border-red-600 dark:hover:bg-red-900/20 dark:hover:text-red-300"
                               >
                                 <svg
                                   className="h-4 w-4"
@@ -618,6 +644,7 @@ export default function SenderDashboard() {
           message={`Are you sure you want to delete "${deleteDoc.name}"? This action cannot be undone.`}
           confirmText="Delete"
           cancelText="Cancel"
+          loading={deleting}
           onClose={() => setDeleteDoc(null)}
           onConfirm={handleConfirmDelete}
         />
@@ -633,6 +660,18 @@ export default function SenderDashboard() {
           cancelText="Cancel"
           onClose={() => setRevokeDoc(null)}
           onConfirm={handleConfirmRevoke}
+        />
+      )}
+
+      {/* Upload Progress Toast (bottom-right corner) */}
+      {showUploadToast && (
+        <UploadProgressToast
+          fileName={uploadFileName}
+          docType={uploadDocType}
+          progress={uploadProgress}
+          status={uploadStatus}
+          errorMessage={uploadErrorMessage}
+          onDismiss={() => setShowUploadToast(false)}
         />
       )}
 

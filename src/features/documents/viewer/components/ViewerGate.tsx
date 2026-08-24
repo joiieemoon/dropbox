@@ -1,7 +1,7 @@
 /**
  * ViewerGate - access control state machine for the public viewer.
  *
- * States: verifying → login_required → email_required → otp_required → granted → denied
+ * States: verifying → login_required → email_required  → granted → denied
  *
  * A signed-in viewer must be the link recipient or document uploader.
  * Unauthenticated users are redirected to the login page.
