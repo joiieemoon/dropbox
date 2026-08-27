@@ -3,7 +3,7 @@
  * tracking links (DocSend-like replacement mechanic).
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 import { DeleteConfirmationModal } from "../../../components/ui/confirmation-modal/DeleteConfirmationModal";
@@ -72,6 +72,8 @@ export default function SenderDashboard() {
     doc: Document;
     recipientId: string;
   } | null>(null);
+  const [revoking, setRevoking] = useState(false);
+  const revokingRef = useRef(false);
 
   const handleShareDocument = useCallback(async () => {
     if (!shareDoc || !shareRecipientId) return;
@@ -247,8 +249,10 @@ export default function SenderDashboard() {
   );
 
   const handleConfirmRevoke = useCallback(async () => {
-    if (!revokeDoc) return;
+    if (!revokeDoc || revokingRef.current) return;
     const { doc, recipientId } = revokeDoc;
+    revokingRef.current = true;
+    setRevoking(true);
     try {
       await revokeAccess(doc.id, recipientId);
       // Update local state
@@ -267,6 +271,9 @@ export default function SenderDashboard() {
     } catch (error) {
       console.error("Failed to revoke access:", error);
       toastError("Failed to revoke access. Please try again.");
+    } finally {
+      revokingRef.current = false;
+      setRevoking(false);
     }
   }, [revokeDoc]);
 
@@ -658,6 +665,7 @@ export default function SenderDashboard() {
           message={`Are you sure you want to revoke access? The recipient will no longer be able to view this document.`}
           confirmText="Revoke"
           cancelText="Cancel"
+          loading={revoking}
           onClose={() => setRevokeDoc(null)}
           onConfirm={handleConfirmRevoke}
         />

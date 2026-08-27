@@ -3,6 +3,7 @@
  * with expandable rows containing page-by-page time tracking graphs.
  */
 
+import { formatDuration } from "../lib/formatDuration";
 import { useState, useCallback, useEffect } from "react";
 import { getRecipientPageDwell } from "../../api/analyticsApi";
 import { toggleAccess } from "../../api/documentsApi";
@@ -51,13 +52,6 @@ interface PageDwellData {
 }
 
 // Pure helpers moved to module scope so they aren't rebuilt per render
-const formatDuration = (seconds: number): string => {
-  if (seconds <= 0) return "0s";
-  const m = Math.floor(seconds / 60);
-  const s = seconds % 60;
-  return m > 0 ? `${m}m ${s}s` : `${s}s`;
-};
-
 const getMaxSeconds = (dwellData: PageDwellData[]): number => {
   return Math.max(...dwellData.map((d) => d.seconds), 1);
 };
@@ -287,7 +281,7 @@ export default function RecipientAnalyticsTable({
                             <div className="h-6 w-6 animate-spin rounded-full border-2 border-brand-500 border-t-transparent" />
                           </div>
                         ) : dwellData.length > 0 ? (
-                          <div className="space-y-2">
+                          <div className={pageCount > 10 ? "max-h-48 space-y-2 overflow-y-auto pr-2" : "space-y-2"}>
                             {Array.from({ length: pageCount }, (_, i) => {
                               const page = i + 1;
                               const pageInfo = dwellData.find(
@@ -311,7 +305,7 @@ export default function RecipientAnalyticsTable({
                                     />
                                     <div className="absolute inset-0 flex items-center px-2">
                                       <span className="text-xs font-medium text-gray-100 dark:text-gray-300">
-                                        {seconds > 0 ? `${seconds}s` : "-"}
+                                        {seconds > 0 ? formatDuration(seconds) : "-"}
                                       </span>
                                     </div>
                                   </div>

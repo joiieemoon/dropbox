@@ -65,6 +65,14 @@ export default function DocxViewerPage() {
   // Delete confirmation state
   const [deleteDoc, setDeleteDoc] = useState<Document | null>(null);
   const [deleting, setDeleting] = useState(false);
+  // Revoke access confirmation state
+  const [revokeDoc, setRevokeDoc] = useState<{
+    docId: string;
+    recipientId: string;
+  } | null>(null);
+  const [revoking, setRevoking] = useState(false);
+  const revokingRef = useRef(false);
+
   const [shareRecipientId, setShareRecipientId] = useState("");
   const [shareRole, setShareRole] = useState<"viewer" | "editor">("viewer");
   const [sharing, setSharing] = useState(false);
@@ -212,7 +220,7 @@ export default function DocxViewerPage() {
   }, []);
 
   const handleCopyLink = useCallback((url: string) => {
-    // Copy silently — no popups or prompts.
+    // Copy silently â€” no popups or prompts.
     copyToClipboard(url);
     toastSuccess("Tracking link copied to clipboard!");
   }, []);
@@ -257,34 +265,40 @@ export default function DocxViewerPage() {
   }, [shareDoc, shareRecipientId, shareRole, recipients]);
 
   const handleRevokeAccess = useCallback(
-    async (docId: string, recipientId: string) => {
-      if (
-        !window.confirm(
-          "Are you sure you want to revoke access? The recipient will no longer be able to view this document.",
-        )
-      ) {
-        return;
-      }
-      try {
-        await revokeAccess(docId, recipientId);
-        setDocxDocs((prev) =>
-          prev.map((d) =>
-            d.id === docId
-              ? {
-                  ...d,
-                  sharedWith: d.sharedWith.filter((id) => id !== recipientId),
-                }
-              : d,
-          ),
-        );
-        toastSuccess("Access revoked successfully!");
-      } catch (error) {
-        console.error("Failed to revoke access:", error);
-        toastError("Failed to revoke access. Please try again.");
-      }
+    (docId: string, recipientId: string) => {
+      // Open the revoke access confirmation modal.
+      setRevokeDoc({ docId, recipientId });
     },
     [],
   );
+
+  const handleConfirmRevoke = useCallback(async () => {
+    if (!revokeDoc || revokingRef.current) return;
+    const { docId, recipientId } = revokeDoc;
+    revokingRef.current = true;
+    setRevoking(true);
+    try {
+      await revokeAccess(docId, recipientId);
+      setDocxDocs((prev) =>
+        prev.map((d) =>
+          d.id === docId
+            ? {
+                ...d,
+                sharedWith: d.sharedWith.filter((id) => id !== recipientId),
+              }
+            : d,
+        ),
+      );
+      setRevokeDoc(null);
+      toastSuccess("Access revoked successfully!");
+    } catch (error) {
+      console.error("Failed to revoke access:", error);
+      toastError("Failed to revoke access. Please try again.");
+    } finally {
+      revokingRef.current = false;
+      setRevoking(false);
+    }
+  }, [revokeDoc]);
 
   return (
     <div className="space-y-6">
@@ -357,7 +371,7 @@ export default function DocxViewerPage() {
                 <span className="font-medium text-gray-700 dark:text-gray-200">
                   {selectedFile.name}
                 </span>{" "}
-                · {(selectedFile.size / 1_000_000).toFixed(2)} MB
+                Â· {(selectedFile.size / 1_000_000).toFixed(2)} MB
               </p>
               <button
                 type="button"
@@ -752,6 +766,19 @@ export default function DocxViewerPage() {
           onConfirm={handleConfirmDelete}
         />
       )}
+      {/* Revoke Access Confirmation Modal */}
+      {revokeDoc && (
+        <DeleteConfirmationModal
+          isOpen={!!revokeDoc}
+          title="Revoke Access"
+          message="Are you sure you want to revoke access? The recipient will no longer be able to view this document."
+          confirmText="Revoke"
+          cancelText="Cancel"
+          loading={revoking}
+          onClose={() => setRevokeDoc(null)}
+          onConfirm={handleConfirmRevoke}
+        />
+      )}
 
       {/* Share Modal */}
       {shareDoc && (
@@ -814,7 +841,7 @@ export default function DocxViewerPage() {
               onChange={(e) => setShareRecipientId(e.target.value)}
               className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-800 outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 dark:border-gray-600 dark:bg-gray-900 dark:text-white"
             >
-              <option value="">Choose a user…</option>
+              <option value="">Choose a userâ€¦</option>
               {recipients
                 .filter(
                   (r) =>
@@ -873,7 +900,7 @@ export default function DocxViewerPage() {
                 disabled={!shareRecipientId || sharing}
                 className="flex-1 rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-600 disabled:opacity-60"
               >
-                {sharing ? "Sharing…" : "Share"}
+                {sharing ? "Sharingâ€¦" : "Share"}
               </button>
             </div>
           </div>

@@ -65,9 +65,11 @@ export default function ShareDocumentPanel({
       onDocumentUpdated(updatedDoc);
       onLinkGenerated(link);
       setGeneratedLink(link);
-      setShareSuccess(`Document shared as ${shareRole} successfully! Tracking link generated.`);
+      setShareSuccess(
+        `Document shared${document.docType === "docx" ? ` as ${shareRole}` : ""} successfully! Tracking link generated.`,
+      );
       toastSuccess(
-        `Shared "${document.name}" as ${shareRole} with ${recipients.find((r) => r.id === selectedRecipientId)?.username ?? "user"}!`,
+        `Shared "${document.name}"${document.docType === "docx" ? ` as ${shareRole}` : ""} with ${recipients.find((r) => r.id === selectedRecipientId)?.username ?? "user"}!`,
       );
       setSelectedRecipientId("");
       setShareRole("viewer");
@@ -103,16 +105,19 @@ export default function ShareDocumentPanel({
               {rec.username} ({rec.email})
             </option>
           ))}
-        </select>
-        <select
-          value={shareRole}
-          onChange={(e) => setShareRole(e.target.value as "viewer" | "editor")}
-          className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-800 outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 dark:border-gray-600 dark:bg-gray-900 dark:text-white"
-        >
-          <option value="viewer">Viewer</option>
-          <option value="editor">Editor</option>
-        </select>
-        <button
+              </select>
+        {/* Role selector — only shown for editable (docx) documents; PDFs are view-only with no editor mode. */}
+        {document.docType === "docx" && (
+          <select
+            value={shareRole}
+            onChange={(e) => setShareRole(e.target.value as "viewer" | "editor")}
+            className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-800 outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 dark:border-gray-600 dark:bg-gray-900 dark:text-white"
+          >
+            <option value="viewer">Viewer</option>
+            <option value="editor">Editor</option>
+          </select>
+        )}
+                <button
           type="button"
           onClick={handleShare}
           disabled={!selectedRecipientId || sharing}
