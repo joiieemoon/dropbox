@@ -17,7 +17,7 @@ export const ToastProvider: FC<ToastProviderProps> = ({ children }) => {
       {children}
       <Toaster
         toastOptions={defaultToastOptions}
-        containerStyle={{ zIndex: 999999 }}
+        containerStyle={{ zIndex: 9999999999999999999 }}
       />
     </>
   );

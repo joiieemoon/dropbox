@@ -708,6 +708,76 @@ export async function listDocumentEditors(
   return editors;
 }
 
+/** A document participant with their access role and state. */
+export interface DocumentAccessRecord {
+  recipient: Recipient;
+  role: "owner" | "editor" | "viewer";
+  active: boolean;
+}
+
+/**
+ * List all users who have access to a document (owner, editors, viewers).
+ * Reads the access subcollection and joins with the users collection.
+ * Returns each participant along with their role and active state.
+ */
+export async function listDocumentAccess(
+  documentId: string,
+): Promise<DocumentAccessRecord[]> {
+  const uid = auth.currentUser?.uid;
+  if (!uid) return [];
+
+  // Verify ownership
+  const docRef = doc(db, "documents", documentId);
+  const docSnap = await getDoc(docRef);
+  if (!docSnap.exists()) throw new Error("Document not found");
+  if (docSnap.data()?.ownerId !== uid)
+    throw new Error("You can only view access for your own documents");
+
+  // Fetch all access records for this document
+  const accessQuery = collection(db, "documents", documentId, "access");
+  const accessSnap = await getDocs(accessQuery);
+
+  const records: DocumentAccessRecord[] = [];
+
+  for (const accessDoc of accessSnap.docs) {
+    const accessData = accessDoc.data();
+    const role = (accessData?.role as DocumentAccessRecord["role"]) ?? "viewer";
+    const active = accessData?.active === true;
+    const recipientId = accessDoc.id;
+
+    try {
+      const userRef = doc(db, "users", recipientId);
+      const userSnap = await getDoc(userRef);
+      const userData = userSnap.data();
+
+      records.push({
+        recipient: {
+          id: recipientId,
+          email: userData?.email ?? "",
+          name: userData?.displayName ?? userData?.username ?? "",
+          username: userData?.username ?? userData?.email?.split("@")[0] ?? "",
+        } as Recipient,
+        role,
+        active,
+      });
+    } catch {
+      // Skip users that can't be resolved
+      records.push({
+        recipient: {
+          id: recipientId,
+          email: "",
+          name: "",
+          username: recipientId,
+        } as Recipient,
+        role,
+        active,
+      });
+    }
+  }
+
+  return records;
+}
+
 /**
  * Toggle editor access for a user on a document.
  * When disabling, sets the access record to inactive.

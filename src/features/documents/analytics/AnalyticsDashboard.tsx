@@ -1,9 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { listDocumentAnalytics } from "../api/analyticsApi";
 import type { DocumentAnalytics } from "../types";
 import PageDwellChart from "./components/PageDwellChart";
 import RecipientAnalyticsTable from "./components/RecipientAnalyticsTable";
+import DocumentAnalyticsTable from "./components/DocumentAnalyticsTable";
+import { buildDocumentAnalyticsRows } from "./lib/documentAnalyticsRows";
 
 function formatDuration(sec: number): string {
   if (sec <= 0) return "—";
@@ -25,10 +27,14 @@ export default function AnalyticsDashboard() {
       .then((data) => {
         if (cancelled) return;
         setAnalytics(data);
-        // Pre-select the document from the URL query param if present.
-        const initialDoc =
-          data.find((a) => a.documentId === requestedDoc) ?? data[0];
-        if (initialDoc) setSelectedDocId(initialDoc.documentId);
+        // Pre-select only if the URL query param specifies a document,
+        // otherwise leave selectedDocId empty until the user clicks/selects one.
+        if (requestedDoc) {
+          const initialDoc = data.find((a) => a.documentId === requestedDoc);
+          if (initialDoc) {
+            setSelectedDocId(initialDoc.documentId);
+          }
+        }
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -40,6 +46,11 @@ export default function AnalyticsDashboard() {
 
   const selected =
     analytics.find((a) => a.documentId === selectedDocId) ?? null;
+
+  const documentRows = useMemo(
+    () => buildDocumentAnalyticsRows(analytics),
+    [analytics],
+  );
 
   if (loading) {
     return (
@@ -64,20 +75,31 @@ export default function AnalyticsDashboard() {
             Document-level and recipient-level engagement insights.
           </p>
         </div>
-        {analytics.length > 0 && (
+        {/* {analytics.length > 0 && (
           <select
             value={selectedDocId}
             onChange={(e) => setSelectedDocId(e.target.value)}
             className="rounded-lg border border-gray-300 bg-white px-3.5 py-2.5 text-sm text-gray-800 outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 dark:border-gray-600 dark:bg-gray-900 dark:text-white"
           >
+            <option value="" disabled>
+              Select a document...
+            </option>
             {analytics.map((a) => (
               <option key={a.documentId} value={a.documentId}>
                 {a.documentTitle}
               </option>
             ))}
           </select>
-        )}
+        )} */}
       </div>
+
+      {analytics.length > 0 && (
+        <DocumentAnalyticsTable
+          rows={documentRows}
+          selectedDocumentId={selectedDocId}
+          onSelectDocument={setSelectedDocId}
+        />
+      )}
 
       {analytics.length === 0 ? (
         <div className="rounded-2xl border border-gray-200 bg-white p-12 text-center dark:border-gray-700 dark:bg-gray-800">
@@ -136,11 +158,14 @@ export default function AnalyticsDashboard() {
                 Recipient Engagement
               </h2>
             </div>
-            <RecipientAnalyticsTable
-              documentId={selected.documentId}
-              recipients={selected.recipients}
-              pageCount={selected.pageCount}
-            />
+
+            <div className="max-h-96 overflow-y-auto">
+              <RecipientAnalyticsTable
+                documentId={selected.documentId}
+                recipients={selected.recipients}
+                pageCount={selected.pageCount}
+              />
+            </div>
           </div>
         </>
       ) : (

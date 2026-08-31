@@ -3,25 +3,29 @@
  * tracking links (DocSend-like replacement mechanic).
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 import { DeleteConfirmationModal } from "../../../components/ui/confirmation-modal/DeleteConfirmationModal";
-import { dismissToast, toastSuccess, toastError } from "../../../components/common/toast/toast";
+import {
+  dismissToast,
+  toastSuccess,
+  toastError,
+} from "../../../components/common/toast/toast";
 import UploadProgressToast, {
   type UploadProgressStatus,
 } from "../../../components/common/upload-progress/UploadProgressToast";
 import { copyToClipboard } from "../../../utils/clipboard";
 import PdfDropzone from "./components/PdfDropzone";
 import ShareDocumentPanel from "./components/ShareDocumentPanel";
+// import RecipientsModal from "./components/RecipientsModal";
+import RecipientsModal from "./components/RecipientsModal";
 import {
   listDocuments,
   listRecipients,
   listTrackingLinks,
   registerDocument,
   deleteDocument,
-  revokeAccess,
-  shareDocument,
 } from "../api/documentsApi";
 import { getPdfPageCount } from "../utils/pdfUtils";
 import { getViewerIdentity, isDocumentOwner } from "../utils/userIdentity";
@@ -50,63 +54,23 @@ export default function SenderDashboard() {
   const [justUploadedDoc, setJustUploadedDoc] = useState<Document | null>(null);
   // Upload progress toast state.
   const [uploadProgress, setUploadProgress] = useState(0);
-  const [uploadStatus, setUploadStatus] = useState<UploadProgressStatus>("uploading");
+  const [uploadStatus, setUploadStatus] =
+    useState<UploadProgressStatus>("uploading");
   const [uploadFileName, setUploadFileName] = useState("");
   const [uploadDocType, setUploadDocType] = useState<"pdf" | "docx">("pdf");
   const [showUploadToast, setShowUploadToast] = useState(false);
-  const [uploadErrorMessage, setUploadErrorMessage] = useState<string | null>(null);
+  const [uploadErrorMessage, setUploadErrorMessage] = useState<string | null>(
+    null,
+  );
 
-  // Share modal state (add user to an already-uploaded document).
-  const [shareDoc, setShareDoc] = useState<Document | null>(null);
-  const [shareRecipientId, setShareRecipientId] = useState("");
-  const [sharing, setSharing] = useState(false);
-  const [shareError, setShareError] = useState<string | null>(null);
-  const [shareSuccess, setShareSuccess] = useState<string | null>(null);
+  // Recipients (All Recipients / manage access) modal state — the single
+  // source of truth for all share CRUD (add, enable/disable, read/edit,
+  // revoke).
+  const [recipientsDoc, setRecipientsDoc] = useState<Document | null>(null);
 
   // Delete confirmation state.
   const [deleteDoc, setDeleteDoc] = useState<Document | null>(null);
   const [deleting, setDeleting] = useState(false);
-
-  // Revoke access confirmation state.
-  const [revokeDoc, setRevokeDoc] = useState<{
-    doc: Document;
-    recipientId: string;
-  } | null>(null);
-  const [revoking, setRevoking] = useState(false);
-  const revokingRef = useRef(false);
-
-  const handleShareDocument = useCallback(async () => {
-    if (!shareDoc || !shareRecipientId) return;
-    setSharing(true);
-    setShareError(null);
-    setShareSuccess(null);
-    try {
-      await shareDocument(shareDoc.id, shareRecipientId);
-      setDocuments((prev) =>
-        prev.map((d) =>
-          d.id === shareDoc.id
-            ? { ...d, sharedWith: [...d.sharedWith, shareRecipientId] }
-            : d,
-        ),
-      );
-      setShareSuccess(
-        `Shared with ${recipients.find((r) => r.id === shareRecipientId)?.username ?? "user"}!`,
-      );
-      toastSuccess(
-        `Shared "${shareDoc.name}" with ${recipients.find((r) => r.id === shareRecipientId)?.username ?? "user"}!`,
-      );
-      setShareRecipientId("");
-      setTimeout(() => {
-        setShareDoc(null);
-        setShareSuccess(null);
-      }, 1200);
-    } catch {
-      setShareError("Failed to share the document. Please try again.");
-      toastError("Failed to share the document. Please try again.");
-    } finally {
-      setSharing(false);
-    }
-  }, [shareDoc, shareRecipientId, recipients]);
 
   useEffect(() => {
     let cancelled = false;
@@ -206,7 +170,30 @@ export default function SenderDashboard() {
     setDocuments((prev) =>
       prev.map((d) => (d.id === updatedDoc.id ? updatedDoc : d)),
     );
-    setJustUploadedDoc(updatedDoc);
+    // Keep the RecipientsModal's document snapshot in sync so add-user /
+    // revoke events update the modal's recipient list and count immediately,
+    // without closing and reopening the modal.
+    setRecipientsDoc((prev) =>
+      prev && prev.id === updatedDoc.id ? updatedDoc : prev,
+    );
+    // Only sync the post-upload share panel when the update belongs to the
+    // document it is currently showing. Updates for any other document
+    // (e.g. recipients managed through the RecipientsModal) must never
+    // hijack the panel.
+    setJustUploadedDoc((prev) =>
+      prev && prev.id === updatedDoc.id ? updatedDoc : prev,
+    );
+  }, []);
+
+  /**
+   * Close the Recipients modal and reset the post-upload "Share with users"
+   * panel. The modal is the single source of truth for share CRUD, so once
+   * it closes the panel state goes back to empty instead of continuing to
+   * show the recipients that were added through the modal.
+   */
+  const handleRecipientsModalClose = useCallback(() => {
+    setRecipientsDoc(null);
+    setJustUploadedDoc(null);
   }, []);
 
   const handleLinkGenerated = useCallback((link: TrackingLink) => {
@@ -239,43 +226,6 @@ export default function SenderDashboard() {
       setDeleting(false);
     }
   }, [deleteDoc, deleting]);
-
-  const handleRevokeAccess = useCallback(
-    (doc: Document, recipientId: string) => {
-      // Open the revoke access confirmation modal.
-      setRevokeDoc({ doc, recipientId });
-    },
-    [],
-  );
-
-  const handleConfirmRevoke = useCallback(async () => {
-    if (!revokeDoc || revokingRef.current) return;
-    const { doc, recipientId } = revokeDoc;
-    revokingRef.current = true;
-    setRevoking(true);
-    try {
-      await revokeAccess(doc.id, recipientId);
-      // Update local state
-      setDocuments((prev) =>
-        prev.map((d) =>
-          d.id === doc.id
-            ? {
-                ...d,
-                sharedWith: d.sharedWith.filter((id) => id !== recipientId),
-              }
-            : d,
-        ),
-      );
-      setRevokeDoc(null);
-      toastSuccess("Access revoked successfully!");
-    } catch (error) {
-      console.error("Failed to revoke access:", error);
-      toastError("Failed to revoke access. Please try again.");
-    } finally {
-      revokingRef.current = false;
-      setRevoking(false);
-    }
-  }, [revokeDoc]);
 
   if (loading) {
     return (
@@ -353,8 +303,10 @@ export default function SenderDashboard() {
             Uploaded Documents
           </h2>
         </div>
-        {documents.filter(
-          (doc) => !viewerIdentity || isDocumentOwner(doc, viewerIdentity),
+                {documents.filter(
+          (doc) =>
+            (doc.docType === "pdf" || !doc.docType) &&
+            (!viewerIdentity || isDocumentOwner(doc, viewerIdentity)),
         ).length === 0 ? (
           <div className="p-12 text-center">
             <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-gray-100 dark:bg-gray-700">
@@ -394,9 +346,10 @@ export default function SenderDashboard() {
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                 {documents
-                  .filter(
+                                    .filter(
                     (doc) =>
-                      !viewerIdentity || isDocumentOwner(doc, viewerIdentity),
+                      (doc.docType === "pdf" || !doc.docType) &&
+                      (!viewerIdentity || isDocumentOwner(doc, viewerIdentity)),
                   )
                   .map((doc) => {
                     const sharedRecipients = recipients.filter((r) =>
@@ -421,34 +374,19 @@ export default function SenderDashboard() {
                         </td>
                         <td className="px-6 py-3">
                           <div className="flex flex-wrap items-center gap-1">
-                            {sharedRecipients.map((r) => (
+                            {sharedRecipients.slice(0, 2).map((r) => (
                               <span
                                 key={r.id}
-                                className="inline-flex items-center gap-1 rounded-full bg-brand-50 px-2 py-0.5 text-xs font-medium text-brand-700 dark:bg-brand-500/10 dark:text-brand-300"
+                                className="inline-flex items-center rounded-full bg-brand-50 px-2 py-0.5 text-xs font-medium text-brand-700 dark:bg-brand-500/10 dark:text-brand-300"
                               >
                                 {r.username}
-                                <button
-                                  type="button"
-                                  onClick={() => handleRevokeAccess(doc, r.id)}
-                                  className="ml-0.5 rounded-full hover:bg-red-100 dark:hover:bg-red-900/30"
-                                  title="Revoke access"
-                                >
-                                  <svg
-                                    className="h-3 w-3 text-red-600 dark:text-red-400"
-                                    fill="none"
-                                    viewBox="0 0 24 24"
-                                    stroke="currentColor"
-                                    strokeWidth={2}
-                                  >
-                                    <path
-                                      strokeLinecap="round"
-                                      strokeLinejoin="round"
-                                      d="M6 18L18 6M6 6l12 12"
-                                    />
-                                  </svg>
-                                </button>
                               </span>
                             ))}
+                            {sharedRecipients.length > 2 && (
+                              <span className="rounded-full border border-brand-300 bg-brand-50 px-2 py-0.5 text-xs font-semibold text-brand-700 dark:border-brand-500/40 dark:bg-brand-500/15 dark:text-brand-300">
+                                +{sharedRecipients.length - 2}
+                              </span>
+                            )}
                             {sharedRecipients.length === 0 && (
                               <span className="text-xs text-gray-400">
                                 Not shared
@@ -456,16 +394,13 @@ export default function SenderDashboard() {
                             )}
                             <button
                               type="button"
-                              onClick={() => {
-                                setShareDoc(doc);
-                                setShareRecipientId("");
-                                setShareError(null);
-                                setShareSuccess(null);
-                              }}
-                              className="inline-flex items-center gap-0.5 rounded-full border border-dashed border-brand-300 px-2 py-0.5 text-xs font-medium text-brand-600 transition hover:bg-brand-50 dark:border-brand-500/40 dark:text-brand-300 dark:hover:bg-brand-500/10"
+                              onClick={() => setRecipientsDoc(doc)}
+                              title="Manage recipients"
+                              aria-label="Manage recipients"
+                              className="inline-flex items-center gap-1 rounded-full border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-600 transition hover:bg-gray-100 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800"
                             >
                               <svg
-                                className="h-3 w-3"
+                                className="h-3.5 w-3.5"
                                 fill="none"
                                 viewBox="0 0 24 24"
                                 stroke="currentColor"
@@ -474,10 +409,10 @@ export default function SenderDashboard() {
                                 <path
                                   strokeLinecap="round"
                                   strokeLinejoin="round"
-                                  d="M12 4.5v15m7.5-7.5h-15"
+                                  d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z"
                                 />
                               </svg>
-                              Add
+                              Manage
                             </button>
                           </div>
                         </td>
@@ -517,7 +452,9 @@ export default function SenderDashboard() {
                                 type="button"
                                 onClick={() =>
                                   doc.docType === "docx"
-                                    ? navigate(`/docx-viewer/${doc.id}?name=${encodeURIComponent(doc.name)}`)
+                                    ? navigate(
+                                        `/docx-viewer/${doc.id}?name=${encodeURIComponent(doc.name)}`,
+                                      )
                                     : navigate(`/documents/${doc.id}`)
                                 }
                                 title="View document"
@@ -657,17 +594,16 @@ export default function SenderDashboard() {
         />
       )}
 
-      {/* Revoke Access Confirmation Modal */}
-      {revokeDoc && (
-        <DeleteConfirmationModal
-          isOpen={!!revokeDoc}
-          title="Revoke Access"
-          message={`Are you sure you want to revoke access? The recipient will no longer be able to view this document.`}
-          confirmText="Revoke"
-          cancelText="Cancel"
-          loading={revoking}
-          onClose={() => setRevokeDoc(null)}
-          onConfirm={handleConfirmRevoke}
+      {/* Recipients (All Recipients / manage access) Modal */}
+      {recipientsDoc && (
+        <RecipientsModal
+          isOpen={!!recipientsDoc}
+          onClose={handleRecipientsModalClose}
+          document={recipientsDoc}
+          recipients={recipients}
+          currentRecipientId={viewerIdentity?.recipientId}
+          onDocumentUpdated={handleDocumentUpdated}
+          onLinkGenerated={handleLinkGenerated}
         />
       )}
 
@@ -681,119 +617,6 @@ export default function SenderDashboard() {
           errorMessage={uploadErrorMessage}
           onDismiss={() => setShowUploadToast(false)}
         />
-      )}
-
-      {/* Share Modal */}
-      {shareDoc && (
-        <div
-          className="fixed inset-0 z-99999990 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
-          onClick={() => {
-            if (!sharing) {
-              setShareDoc(null);
-              setShareRecipientId("");
-              setShareError(null);
-              setShareSuccess(null);
-            }
-          }}
-        >
-          <div
-            className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl dark:bg-gray-800"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="mb-4 flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-gray-800 dark:text-white">
-                Share Document
-              </h3>
-              <button
-                type="button"
-                onClick={() => {
-                  if (!sharing) {
-                    setShareDoc(null);
-                    setShareRecipientId("");
-                    setShareError(null);
-                    setShareSuccess(null);
-                  }
-                }}
-                className="rounded-full p-1.5 text-gray-400 transition hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-700 dark:hover:text-gray-300"
-              >
-                <svg
-                  className="h-5 w-5"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth={2}
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M6 18L18 6M6 6l12 12"
-                  />
-                </svg>
-              </button>
-            </div>
-
-            <p className="mb-4 truncate text-sm text-gray-500 dark:text-gray-400">
-              {shareDoc.name}
-            </p>
-
-            <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">
-              Select user to share with
-            </label>
-            <select
-              value={shareRecipientId}
-              onChange={(e) => setShareRecipientId(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-800 outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 dark:border-gray-600 dark:bg-gray-900 dark:text-white"
-            >
-              <option value="">Choose a user…</option>
-              {recipients
-                .filter(
-                  (r) =>
-                    !shareDoc.sharedWith.includes(r.id) &&
-                    r.id !== viewerIdentity?.recipientId,
-                )
-                .map((rec) => (
-                  <option key={rec.id} value={rec.id}>
-                    {rec.username} ({rec.email})
-                  </option>
-                ))}
-            </select>
-
-            {shareError && (
-              <p className="mt-2 text-sm text-red-500">{shareError}</p>
-            )}
-            {shareSuccess && (
-              <p className="mt-2 text-sm text-emerald-600 dark:text-emerald-400">
-                {shareSuccess}
-              </p>
-            )}
-
-            <div className="mt-5 flex gap-3">
-              <button
-                type="button"
-                onClick={() => {
-                  if (!sharing) {
-                    setShareDoc(null);
-                    setShareRecipientId("");
-                    setShareError(null);
-                    setShareSuccess(null);
-                  }
-                }}
-                disabled={sharing}
-                className="flex-1 rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50 disabled:opacity-60 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleShareDocument}
-                disabled={!shareRecipientId || sharing}
-                className="flex-1 rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-600 disabled:opacity-60"
-              >
-                {sharing ? "Sharing…" : "Share"}
-              </button>
-            </div>
-          </div>
-        </div>
       )}
     </div>
   );

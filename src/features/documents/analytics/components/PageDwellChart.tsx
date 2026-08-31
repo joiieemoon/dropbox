@@ -5,7 +5,7 @@ interface Props {
   data: number[];
 }
 
-const HORIZONTAL_THRESHOLD = 10;
+const HORIZONTAL_THRESHOLD = 1;
 
 export default function PageDwellChart({ data }: Props) {
   const chartData = data.map((seconds, index) => ({
@@ -16,7 +16,7 @@ export default function PageDwellChart({ data }: Props) {
   const isHorizontal = chartData.length > HORIZONTAL_THRESHOLD;
 
   return (
-    <div className="h-72 w-full">
+    <div className="h-52 w-full">
       <ResponsiveContainer width="100%" height="100%">
         <BarChart
           data={chartData}

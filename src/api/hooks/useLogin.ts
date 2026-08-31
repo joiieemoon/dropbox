@@ -89,10 +89,15 @@ export function useLogin(options?: UseLoginOptions) {
       // Redirect on success — prefer the "from" state (e.g. from ViewerGate
       // or ProtectedRoute) so the user returns to the page they were trying
       // to access. The "from" value may be a string path or a Location object.
+      //
+      // Important: use `replace` so the sign-in page (which the user logged in
+      // from) is removed from the browser back-history. Otherwise pressing the
+      // browser Back button after login would navigate back to /signin and the
+      // PublicRoute wrapper would bounce the user to the sign-in page again.
       const from = (location.state as { from?: unknown })?.from;
       const target = resolveRedirectTarget(from, options?.onSuccessRedirect);
       if (target) {
-        navigate(target);
+        navigate(target, { replace: true });
       }
     },
     onError: (error) => {
