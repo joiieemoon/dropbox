@@ -31,8 +31,12 @@ import {
 
 import type { DocumentEditorContainerComponent as ContainerType } from "@syncfusion/ej2-react-documenteditor";
 
-import type { ViewChangeEventArgs } from "@syncfusion/ej2-documenteditor";
+import type {
+  RevisionActionEventArgs,
+  ViewChangeEventArgs,
+} from "@syncfusion/ej2-documenteditor";
 import type { RevisionMeta } from "../../types";
+import { toastWarning } from "../../../../components/common/toast/toast";
 
 export const EJ2_SERVICES_URL =
   "https://document.syncfusion.com/web-services/docx-editor/api/documenteditor/";
@@ -72,6 +76,8 @@ interface DocxEditorProps {
     revisionId: string,
     status: "accepted" | "rejected",
   ) => void;
+  /** Whether the current user may accept/reject tracked changes (owner only). */
+  canManageRevisions?: boolean;
   height?: string;
 }
 
@@ -86,6 +92,7 @@ export default function DocxEditor({
   onPageCountChange,
   onSave,
   // onRevisionStatusChange,
+  canManageRevisions = true,
   height = "80vh",
 }: DocxEditorProps) {
   const containerRef = useRef<ContainerType | null>(null);
@@ -95,6 +102,25 @@ export default function DocxEditor({
   const totalPagesRef = useRef(Math.max(1, pageCount));
   const onPageCountChangeRef = useRef(onPageCountChange);
   onPageCountChangeRef.current = onPageCountChange;
+
+  // Track-changes accept/reject is owner-only. `beforeAcceptRejectChanges`
+  // fires on every accept/reject path (toolbar, context menu, shortcuts) and
+  // the built-in implementation respects args.cancel, making this the single
+  // authoritative gate.
+  const canManageRevisionsRef = useRef(canManageRevisions);
+  canManageRevisionsRef.current = canManageRevisions;
+
+  const handleBeforeAcceptReject = useCallback(
+    (args: RevisionActionEventArgs) => {
+      if (canManageRevisionsRef.current) return;
+
+      args.cancel = true;
+      toastWarning(
+        "Only the document owner can accept or reject tracked changes.",
+      );
+    },
+    [],
+  );
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -657,7 +683,11 @@ export default function DocxEditor({
           </div>
         )}
 
-        <div className="docx-editor-container h-full">
+        <div
+          className={`docx-editor-container h-full ${
+            canManageRevisions ? "" : "docx-editor--no-accept-reject"
+          }`}
+        >
           <DocumentEditorContainerComponent
             ref={containerRef}
             height="100%"
@@ -672,6 +702,7 @@ export default function DocxEditor({
               showRuler: true,
             }}
             created={handleCreated}
+            beforeAcceptRejectChanges={handleBeforeAcceptReject}
           >
             <Inject
               services={[

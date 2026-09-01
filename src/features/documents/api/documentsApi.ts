@@ -176,8 +176,8 @@ export async function registerEditableDocument(
   if (file.size > MAX_DOCX_SIZE) {
     throw new Error(
       `The .docx file is too large (${(file.size / 1024).toFixed(0)}KB). ` +
-        `Firestore can only store documents up to 1MB. ` +
-        `Please use a smaller file (under 800KB) or compress it first.`,
+      `Firestore can only store documents up to 1MB. ` +
+      `Please use a smaller file (under 800KB) or compress it first.`,
     );
   }
 
@@ -463,8 +463,8 @@ export async function updateEditableDocument(
     console.error("[documentsApi] File too large:", docxBlob.size);
     throw new Error(
       `The updated document is too large (${(docxBlob.size / 1024).toFixed(0)}KB). ` +
-        `Firestore can only store documents up to 1MB. ` +
-        `Please reduce the content size.`
+      `Firestore can only store documents up to 1MB. ` +
+      `Please reduce the content size.`
     );
   }
 
@@ -825,19 +825,19 @@ export async function listSharedDocuments(): Promise<Document[]> {
     // Query all documents and filter by access
     const allDocsQuery = query(collection(db, "documents"));
     const allDocsSnap = await getDocs(allDocsQuery);
-    
+
     const sharedDocs: Document[] = [];
-    
+
     for (const docSnap of allDocsSnap.docs) {
       const data = docSnap.data();
-      
+
       // Skip if user is the owner
       if (data.ownerId === uid) continue;
-      
+
       // Check if user has access
       const accessRef = doc(db, "documents", docSnap.id, "access", uid);
       const accessSnap = await getDoc(accessRef);
-      
+
       if (accessSnap.exists() && accessSnap.data()?.active === true) {
         sharedDocs.push({
           id: docSnap.id,
@@ -859,7 +859,7 @@ export async function listSharedDocuments(): Promise<Document[]> {
         } as Document);
       }
     }
-    
+
     return sharedDocs;
   } catch (error) {
     console.error("Failed to fetch shared documents:", error);

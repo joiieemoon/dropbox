@@ -308,6 +308,7 @@ export default function DocxEditorPage() {
         pageCount={doc.pageCount}
         version={doc.currentVersion ?? 1}
         revisions={doc.revisions ?? []}
+        canManageRevisions={role === "owner"}
         onSave={handleSave}
         onRevisionStatusChange={handleRevisionStatusChange}
         height="75vh"

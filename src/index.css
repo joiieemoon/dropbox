@@ -825,6 +825,21 @@ span.flatpickr-weekday,
 .docx-viewer-container [style*="overflow: auto"]::-webkit-scrollbar {
   display: none !important;
 }
+
+/* DOCX Editor - hide Accept/Reject controls from non-owners.
+   Applied when <DocxEditor> renders with canManageRevisions=false
+   (classic toolbar mode). Covers all three Syncfusion surfaces:
+   - Track-changes pane per-change Accept/Reject buttons
+   - Pane header "Accept all / Reject all" dropdown
+   - Context-menu "Accept Changes"/"Reject Changes" items
+   The beforeAcceptRejectChanges event gate remains as a backstop. */
+.docx-editor--no-accept-reject .e-de-track-accept-button,
+.docx-editor--no-accept-reject .e-de-track-reject-button,
+.docx-editor--no-accept-reject #e-de-menu-option,
+.docx-editor--no-accept-reject [id$="_contextmenu_accept_changes"],
+.docx-editor--no-accept-reject [id$="_contextmenu_reject_changes"] {
+  display: none !important;
+}
 /* ================================================================
    MoonDoc micro-animations
    ----------------------------------------------------------------
