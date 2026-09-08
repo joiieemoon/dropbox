@@ -54,6 +54,14 @@ export interface Document {
   sharedRole?: "owner" | "editor" | "viewer";
   /** Tracked change history for editable documents. */
   revisions?: RevisionMeta[];
+  /** Current compacted SFDT snapshot (live collaborative editing base;viewers watch this). */
+  sfdt?: string;
+  /** Cloud Storage location for an SFDT snapshot too large for Firestore. */
+  sfdtStoragePath?: string;
+  /** Snapshot version the RTDB operation log is relative to. */
+  baseVersion?: number;
+  /** Who last persisted the compacted snapshot and when (epoch ms). */
+  lastEditedByAt?: { by: string; at: number };
 }
 
 /** A single version snapshot of an editable (.docx) document. */

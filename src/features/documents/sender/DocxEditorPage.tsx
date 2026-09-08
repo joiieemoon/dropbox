@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import DocxEditor, { type DocxEditorSaveResult } from "./components/DocxEditor";
+import DocxEditor, { type DocxEditorSaveResult, type DocxEditorMode } from "./components/DocxEditor";
 import {
   getDocumentById,
   getDocumentAccessRole,
@@ -10,14 +10,19 @@ import {
   updateRevisionStatus,
   listDocumentEditors,
   toggleEditorAccess,
+  persistDocxSnapshot,
+  getDocxSnapshot,
   type DocumentEditorAccess,
 } from "../api/documentsApi";
 import type { Document } from "../types";
 import { useSidebar } from "../../../context/SidebarContext";
+import { auth } from "../../../firebase";
 export default function DocxEditorPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [doc, setDoc] = useState<Document | null>(null);
+  const [editorSource, setEditorSource] = useState<File | string | null>(null);
+  const [editorMode, setEditorMode] = useState<DocxEditorMode>("editing");
   const [role, setRole] = useState<"owner" | "editor" | "viewer" | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -35,7 +40,7 @@ export default function DocxEditorPage() {
     setError(null);
 
     Promise.all([getDocumentById(id), getDocumentAccessRole(id)])
-      .then(([d, r]) => {
+      .then(async ([d, r]) => {
         if (!d) {
           throw new Error("Document not found");
         }
@@ -44,6 +49,14 @@ export default function DocxEditorPage() {
         }
         setDoc(d);
         setRole(r);
+        // Prefer the compacted canonical state once it exists. Legacy
+        // documents remain fully supported through their DOCX/data URL.
+        try {
+          setEditorSource((await getDocxSnapshot(d)) ?? d.dataUrl ?? d.url ?? null);
+        } catch (snapshotError) {
+          console.warn("[DocxEditorPage] Failed to load SFDT snapshot; using DOCX", snapshotError);
+          setEditorSource(d.dataUrl ?? d.url ?? null);
+        }
       })
       .catch((e) => {
         console.error("[DocxEditorPage] Access check failed:", e);
@@ -145,6 +158,12 @@ export default function DocxEditorPage() {
           result.pageCount,
           newVersion,
         );
+        await persistDocxSnapshot(id, {
+          sfdt: result.sfdt,
+          baseVersion: doc.baseVersion ?? 0,
+          by: auth.currentUser?.uid ?? doc.ownerId ?? "unknown",
+          at: Date.now(),
+        });
         console.log(
           "[DocxEditorPage] updateEditableDocument completed successfully. URL size:",
           updatedUrl.length,
@@ -180,6 +199,12 @@ export default function DocxEditorPage() {
                 url: updatedUrl,
                 dataUrl: updatedUrl,
                 revisions: mergedRevisions,
+                sfdt: result.sfdt,
+                baseVersion: prev.baseVersion ?? 0,
+                lastEditedByAt: {
+                  by: auth.currentUser?.uid ?? prev.ownerId ?? "unknown",
+                  at: Date.now(),
+                },
               }
             : null,
         );
@@ -303,12 +328,17 @@ export default function DocxEditorPage() {
       </div>
 
       <DocxEditor
-        source={doc.dataUrl ?? doc.url ?? null}
+        source={editorSource}
         title={doc.name}
         pageCount={doc.pageCount}
         version={doc.currentVersion ?? 1}
         revisions={doc.revisions ?? []}
         canManageRevisions={role === "owner"}
+        mode={editorMode}
+        onModeChange={setEditorMode}
+        liveDocumentId={id}
+        baseVersion={doc.baseVersion ?? 0}
+        currentUserId={auth.currentUser?.uid}
         onSave={handleSave}
         onRevisionStatusChange={handleRevisionStatusChange}
         height="75vh"

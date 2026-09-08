@@ -9,12 +9,14 @@
  *   VITE_FIREBASE_STORAGE_BUCKET
  *   VITE_FIREBASE_MESSAGING_SENDER_ID
  *   VITE_FIREBASE_APP_ID
+ *   VITE_FIREBASE_DATABASE_URL (only for live collaborative editing)
  */
 
 import { initializeApp, type FirebaseApp } from "firebase/app";
 import { getAuth, type Auth } from "firebase/auth";
 import { getFirestore, type Firestore } from "firebase/firestore";
 import { getStorage, type FirebaseStorage } from "firebase/storage";
+import { getDatabase, type Database } from "firebase/database";
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -51,5 +53,25 @@ export const app: FirebaseApp = initializeApp(firebaseConfig);
 export const auth: Auth = getAuth(app);
 export const db: Firestore = getFirestore(app);
 export const storage: FirebaseStorage = getStorage(app);
+
+// Realtime Database — ONLY needed for live collaborative editing (RTDB POC).
+// Lazy, so the app never breaks when VITE_FIREBASE_DATABASE_URL is not set.
+
+let rtdbInstance: Database | null = null;
+export function getRtdb(): Database {
+  if (!rtdbInstance) {
+    const url = import.meta.env.VITE_FIREBASE_DATABASE_URL;
+    if (!url) {
+      throw new Error(
+        "Live collaborative editing needs Firebase Realtime Database.\n" +
+          "1) Enable Realtime Database in the Firebase console.\n" +
+          "2) Add VITE_FIREBASE_DATABASE_URL to .env / .env.development\n" +
+          "   (e.g. https://<project-id>-default-rtdb.<region>.firebasedatabase.app).",
+      );
+    }
+    rtdbInstance = getDatabase(app, url);
+  }
+  return rtdbInstance;
+}
 
 export default app;

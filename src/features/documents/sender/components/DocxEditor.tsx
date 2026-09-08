@@ -24,6 +24,7 @@ import {
   Selection,
   Search,
   ContextMenu,
+  CollaborativeEditingHandler,
   // Comment,
   // ImageResizer,
   // OptionsPane,
@@ -34,9 +35,12 @@ import type { DocumentEditorContainerComponent as ContainerType } from "@syncfus
 import type {
   RevisionActionEventArgs,
   ViewChangeEventArgs,
+  ContentChangeEventArgs,
+  ReviewTabType,
 } from "@syncfusion/ej2-documenteditor";
 import type { RevisionMeta } from "../../types";
 import { toastWarning } from "../../../../components/common/toast/toast";
+import { useCollaborativeEditing, type CollaborativeEditingHandlerLike } from "../hooks/useCollaborativeEditing";
 
 export const EJ2_SERVICES_URL =
   "https://document.syncfusion.com/web-services/docx-editor/api/documenteditor/";
@@ -55,12 +59,96 @@ function mergeRevisions(
   return [...primary, ...fresh];
 }
 
+/** Structural view of the SDK's TrackChangesPane (public members only). */
+interface TrackChangesPaneLike {
+  isChangesTabVisible: boolean;
+  updateTrackChanges?: (show?: boolean) => void;
+}
+
+/** Structural view of the SDK's comment/review Tab (tab 1 = "Changes"). */
+interface ReviewTabLike {
+  hideTab: (index: number, hide?: boolean) => void;
+  select?: (index: number) => void;
+}
+
+interface CommentReviewPaneLike {
+  reviewTab?: ReviewTabLike | null;
+  showHidePane?: (show: boolean, tab: ReviewTabType) => void;
+}
+
+/** Structural view of the DocumentEditor members this module drives for mode. */
+interface ReviewPaneEditorLike {
+  isReadOnly: boolean;
+  enableTrackChanges: boolean;
+  showRevisions: boolean;
+  trackChangesPane?: TrackChangesPaneLike | null;
+  commentReviewPane?: CommentReviewPaneLike | null;
+}
+
+/**
+ * Shows or hides the Track-Changes review sidebar (the "Changes" tab that
+ * carries the Accept/Reject controls).
+ *
+ * The SDK hides tab index 1 ("Changes") whenever showRevisions is false in
+ * CommentReviewPane.showHidePane, so we mirror that exact mechanism:
+ * suggesting = revisions + Changes tab visible; everything else = hidden.
+ */
+function enforceChangesTabVisibility(
+  editor: ReviewPaneEditorLike | null | undefined,
+  show: boolean,
+): void {
+  if (!editor) return;
+  try {
+    const pane = editor.trackChangesPane;
+    const review = editor.commentReviewPane;
+    if (show) {
+      if (pane) {
+        pane.isChangesTabVisible = true;
+        pane.updateTrackChanges?.(true);
+      }
+      // Un-hide the Changes tab (index 1) and open the review pane on it.
+      review?.reviewTab?.hideTab?.(1, false);
+      review?.showHidePane?.(true, "Changes");
+    } else {
+      if (pane) {
+        pane.isChangesTabVisible = false;
+        pane.updateTrackChanges?.(false);
+      }
+      // Hide the Changes tab and close the whole review pane so the
+      // Accept/Reject sidebar can never appear outside Suggesting mode.
+      review?.reviewTab?.hideTab?.(1, true);
+      review?.showHidePane?.(false, "Changes");
+    }
+  } catch {
+    // Non-fatal: the review pane differs across SDK builds.
+  }
+}
+
+/**
+ * Applies the editor flags for a mode. Only "suggesting" tracks changes and
+ * shows the review (Accept/Reject) sidebar; "editing" (live co-edit) and
+ * "viewing" keep the Changes tab hidden.
+ */
+function applyDocEditorMode(
+  editor: ReviewPaneEditorLike | null | undefined,
+  mode: DocxEditorMode,
+): void {
+  if (!editor) return;
+  editor.isReadOnly = mode === "viewing";
+  editor.enableTrackChanges = mode === "suggesting";
+  // showRevisions = false is the SDK's own switch that hides the Changes tab.
+  editor.showRevisions = mode === "suggesting";
+  enforceChangesTabVisibility(editor, mode === "suggesting");
+}
+
 export interface DocxEditorSaveResult {
   sfdt: string;
   docxBlob: Blob;
   pageCount: number;
   revisions: RevisionMeta[];
 }
+
+export type DocxEditorMode = "editing" | "suggesting" | "viewing";
 
 interface DocxEditorProps {
   darkMode?: boolean;
@@ -78,6 +166,11 @@ interface DocxEditorProps {
   ) => void;
   /** Whether the current user may accept/reject tracked changes (owner only). */
   canManageRevisions?: boolean;
+  mode?: DocxEditorMode;
+  onModeChange?: (mode: DocxEditorMode) => void;
+  liveDocumentId?: string;
+  baseVersion?: number;
+  currentUserId?: string;
   height?: string;
 }
 
@@ -93,6 +186,11 @@ export default function DocxEditor({
   onSave,
   // onRevisionStatusChange,
   canManageRevisions = true,
+  mode = "editing",
+  onModeChange,
+  liveDocumentId,
+  baseVersion = 0,
+  currentUserId,
   height = "80vh",
 }: DocxEditorProps) {
   const containerRef = useRef<ContainerType | null>(null);
@@ -102,6 +200,10 @@ export default function DocxEditor({
   const totalPagesRef = useRef(Math.max(1, pageCount));
   const onPageCountChangeRef = useRef(onPageCountChange);
   onPageCountChangeRef.current = onPageCountChange;
+  // Mirrors the current mode for asynchronous load callbacks, so document
+  // loading always applies the right mode without re-binding on mode changes.
+  const modeRef = useRef(mode);
+  modeRef.current = mode;
 
   // Track-changes accept/reject is owner-only. `beforeAcceptRejectChanges`
   // fires on every accept/reject path (toolbar, context menu, shortcuts) and
@@ -134,6 +236,9 @@ export default function DocxEditor({
   //   null,
   // );
   const pendingRevisionsRef = useRef<RevisionMeta[]>([]);
+  const liveHandlerRef = useRef<CollaborativeEditingHandlerLike | null>(null);
+  const [liveHandler, setLiveHandler] =
+    useState<CollaborativeEditingHandlerLike | null>(null);
   const user = useSelector((state: RootState) => state.auth.user);
   // Resolve the actual editor's display name from the logged-in user profile.
   // Falls back through username → email-prefix → email → full name → name.
@@ -144,6 +249,38 @@ export default function DocxEditor({
     `${user?.firstName ?? ""} ${user?.lastName ?? ""}`.trim() ||
     user?.name ||
     "Unknown User";
+  const { isLive, error: liveError } = useCollaborativeEditing({
+    enabled: mode === "editing",
+    documentId: liveDocumentId,
+    userId: currentUserId,
+    userName: authorName,
+    baseVersion,
+    handler: liveHandler,
+  });
+  // Phase 6 displays this in the header; retain it here while the transport is
+  // being connected so runtime failures do not affect Suggesting/Viewing.
+  void isLive;
+  void liveError;
+  useEffect(() => {
+    const editor = containerRef.current?.documentEditor;
+    if (!editor) return;
+    // Editing (live) and Viewing hide the Changes tab; only Suggesting shows
+    // the Accept/Reject review sidebar.
+    applyDocEditorMode(editor, mode);
+    if (mode === "editing" && !liveHandlerRef.current) {
+      const collaborativeEditor = editor as typeof editor & {
+        collaborativeEditingHandlerModule?: CollaborativeEditingHandlerLike;
+      };
+      editor.enableCollaborativeEditing = true;
+      const handler =
+        collaborativeEditor.collaborativeEditingHandlerModule ??
+        new CollaborativeEditingHandler(editor);
+      collaborativeEditor.collaborativeEditingHandlerModule = handler;
+      liveHandlerRef.current = handler;
+      setLiveHandler(handler);
+    }
+    if (mode !== "editing") setLiveHandler(null);
+  }, [mode]);
   useEffect(() => {
     pendingSource.current = source;
   }, [source]);
@@ -205,48 +342,65 @@ export default function DocxEditor({
     setCurrentPage(1);
   }, [refreshTotalPageCount]);
 
-  const handleContentChange = useCallback(() => {
-    // Debounce to let Syncfusion update the revision collection
-    window.setTimeout(() => {
-      const editor = containerRef.current?.documentEditor;
-      if (!editor) return;
-      try {
-        const revs = editor.revisions?.revisions ?? [];
-        if (revs.length > 0) {
-          const captured = revs.map((rev) => {
-            let content = "";
-            try {
-              content = rev.getContent();
-            } catch {
-              content = "";
-            }
-            return {
-              id: rev.revisionID,
-              // Use the actual author from Syncfusion first,
-              // fall back to the logged-in user for robustness.
-              author: rev.author || authorName,
-              date: rev.date,
-              type: rev.revisionType,
-              content,
-              status: "pending" as const,
-              version: version + 1,
-            };
-          });
-          // MERGE with any existing pending revisions (don't replace)
-          pendingRevisionsRef.current = mergeRevisions(
-            pendingRevisionsRef.current,
-            captured,
-          );
-          console.log(
-            "[DocxEditor] Captured revisions from contentChange:",
-            captured.length,
-          );
-        }
-      } catch (e) {
-        console.warn("[DocxEditor] Failed to capture revisions:", e);
+  const handleContentChange = useCallback(
+    (args?: ContentChangeEventArgs) => {
+      if (mode === "editing" && args?.operations?.length) {
+        console.debug("[DocxEditorLive] local operation", {
+          count: args.operations.length,
+        });
+        liveHandlerRef.current?.sendActionToServer(args.operations);
       }
-    }, 100);
-  }, [version, authorName]);
+      // Debounce to let Syncfusion update the revision collection
+      window.setTimeout(() => {
+        const editor = containerRef.current?.documentEditor;
+        if (!editor) return;
+        try {
+          const revs = editor.revisions?.revisions ?? [];
+          if (revs.length > 0) {
+            const captured = revs.map((rev) => {
+              let content = "";
+              try {
+                content = rev.getContent();
+              } catch {
+                content = "";
+              }
+              return {
+                id: rev.revisionID,
+                // Use the actual author from Syncfusion first,
+                // fall back to the logged-in user for robustness.
+                author: rev.author || authorName,
+                date: rev.date,
+                type: rev.revisionType,
+                content,
+                status: "pending" as const,
+                version: version + 1,
+              };
+            });
+            // MERGE with any existing pending revisions (don't replace)
+            pendingRevisionsRef.current = mergeRevisions(
+              pendingRevisionsRef.current,
+              captured,
+            );
+            console.log(
+              "[DocxEditor] Captured revisions from contentChange:",
+              captured.length,
+            );
+          }
+        } catch (e) {
+          console.warn("[DocxEditor] Failed to capture revisions:", e);
+        }
+      }, 100);
+    },
+    [version, authorName, mode],
+  );
+
+  // Syncfusion captures event callbacks at creation. Rebind after a mode
+  // change so Editing forwards operations instead of retaining Suggesting's
+  // original callback.
+  useEffect(() => {
+    const editor = containerRef.current?.documentEditor;
+    if (editor) editor.contentChange = handleContentChange;
+  }, [handleContentChange]);
 
   const loadIntoEditor = useCallback(
     async (src: File | string, name: string) => {
@@ -264,10 +418,10 @@ export default function DocxEditor({
       totalPagesRef.current = fallbackCount;
       setTotalPages(fallbackCount);
 
-      // EDIT MODE: enable editing
-      editor.isReadOnly = false;
-      editor.enableTrackChanges = true;
-      console.log("[DocxEditor] Enabled track changes:", editor.enableTrackChanges  );
+      // Apply the current mode. Only Suggesting shows the review (Accept/Reject)
+      // sidebar; Editing/Viewing hide the Changes tab via the SDK
+      // showRevisions=false path.
+      applyDocEditorMode(editor, modeRef.current);
 
       try {
         if (typeof src === "string") {
@@ -284,9 +438,20 @@ export default function DocxEditor({
           setDocName(name || src.name || "Document");
         }
 
-        // Re-apply edit mode AFTER document loads (enableTrackChanges gets wiped on open)
-        editor.isReadOnly = false;
-        editor.enableTrackChanges = true;
+        // Re-apply the current mode AFTER document loads (the editor resets
+        // these flags when a document is opened). Changes tab shows only in
+        // Suggesting; Editing (live) and Viewing keep it hidden.
+        applyDocEditorMode(editor, modeRef.current);
+        // The review pane can initialize slightly after the content loads;
+        // re-assert mode a couple of times so the sidebar can never flash in.
+        window.setTimeout(() => {
+          const lateEditor = containerRef.current?.documentEditor;
+          if (lateEditor) applyDocEditorMode(lateEditor, modeRef.current);
+        }, 400);
+        window.setTimeout(() => {
+          const lateEditor = containerRef.current?.documentEditor;
+          if (lateEditor) applyDocEditorMode(lateEditor, modeRef.current);
+        }, 1200);
         // Set current user so changes are tagged as tracked revisions
         editor.currentUser = authorName;
 
@@ -325,10 +490,9 @@ export default function DocxEditor({
     const editor = container?.documentEditor;
     if (!editor) return;
 
-    // EDIT MODE: enable editing
-    editor.isReadOnly = false;
-    editor.enableTrackChanges = true;
-    console.log("[DocxEditor] enableTrackChanges:", editor.enableTrackChanges);
+    // Only Suggesting tracks changes and shows the review (Accept/Reject)
+    // sidebar; Editing (live) and Viewing keep the Changes tab hidden.
+    applyDocEditorMode(editor, mode);
     // Set current user so changes are tagged as tracked revisions
     editor.currentUser = authorName;
     console.log("[DocxEditor] currentUser:", editor.currentUser);
@@ -416,7 +580,9 @@ export default function DocxEditor({
 
       // Extract tracked changes (revisions) from Syncfusion.
       // First use revisions captured from contentChange events.
-      const capturedFromChanges: RevisionMeta[] = [...pendingRevisionsRef.current];
+      const capturedFromChanges: RevisionMeta[] = [
+        ...pendingRevisionsRef.current,
+      ];
 
       // IMPORTANT: Also merge in ANY revisions currently in the editor
       // that may not have been captured yet (e.g. changes made right
@@ -654,7 +820,6 @@ export default function DocxEditor({
   return (
     <div className="rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
       <DocxEditorHeader
-        
         name={docName}
         loading={loading}
         saving={saving}
@@ -663,6 +828,8 @@ export default function DocxEditor({
         onPrev={goPrev}
         onNext={goNext}
         onSave={handleSave}
+        mode={mode}
+        onModeChange={onModeChange}
       />
 
       {/* {revisionActionMsg && (
@@ -686,6 +853,8 @@ export default function DocxEditor({
         <div
           className={`docx-editor-container h-full ${
             canManageRevisions ? "" : "docx-editor--no-accept-reject"
+          } ${
+            mode === "suggesting" ? "" : "docx-editor--no-changes-tab"
           }`}
         >
           <DocumentEditorContainerComponent
@@ -722,7 +891,7 @@ export default function DocxEditor({
           </DocumentEditorContainerComponent>
         </div>
       </div>
-{/* 
+      {/* 
       <RevisionHistoryPanel
         revisions={revisionHistory}
         onAccept={handleAcceptRevision}
@@ -898,6 +1067,8 @@ function DocxEditorHeader({
   onPrev,
   onNext,
   onSave,
+  mode,
+  onModeChange,
 }: {
   name: string;
   loading: boolean;
@@ -907,6 +1078,8 @@ function DocxEditorHeader({
   onPrev: () => void;
   onNext: () => void;
   onSave: () => void;
+  mode: DocxEditorMode;
+  onModeChange?: (mode: DocxEditorMode) => void;
 }) {
   return (
     <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3 dark:border-gray-700">
@@ -930,6 +1103,20 @@ function DocxEditorHeader({
       </div>
 
       <div className="flex items-center gap-3">
+        {onModeChange && (
+          <div className="flex rounded-lg border border-gray-200 p-0.5 dark:border-gray-700">
+            {(["editing", "suggesting", "viewing"] as const).map((item) => (
+              <button
+                key={item}
+                type="button"
+                onClick={() => onModeChange(item)}
+                className={`rounded-md px-2 py-1 text-xs font-medium capitalize ${mode === item ? "bg-brand-500 text-white" : "text-gray-600 dark:text-gray-300"}`}
+              >
+                {item}
+              </button>
+            ))}
+          </div>
+        )}
         <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-medium text-blue-700 dark:bg-blue-500/10 dark:text-blue-400">
           <span className={loading ? "animate-pulse" : ""}>
             {loading ? "Loading…" : "Editable"}

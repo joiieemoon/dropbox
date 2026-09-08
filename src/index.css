@@ -840,6 +840,15 @@ span.flatpickr-weekday,
 .docx-editor--no-accept-reject [id$="_contextmenu_reject_changes"] {
   display: none !important;
 }
+/* DOCX Editor - the Track-Changes review sidebar (Accept/Reject) may show
+   ONLY in Suggesting mode. When <DocxEditor> renders in any other mode the
+   wrapper gets docx-editor--no-changes-tab and the whole review pane is
+   hidden, so the Changes tab can never appear in Editing (live) or Viewing
+   even if SDK init races with the mode switch. */
+.docx-editor--no-changes-tab .e-de-review-pane {
+  display: none !important;
+}
+
 /* ================================================================
    MoonDoc micro-animations
    ----------------------------------------------------------------

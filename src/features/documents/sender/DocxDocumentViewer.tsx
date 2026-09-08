@@ -7,6 +7,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import DocxViewer from "./components/DocxViewer";
 import { getDocumentById } from "../api/documentsApi";
+import { db } from "../../../firebase";
+import { doc as firestoreDoc, onSnapshot } from "firebase/firestore";
 import { BeaconQueue } from "../viewer/telemetry/BeaconQueue";
 import { useBeaconDispatcher } from "../viewer/telemetry/useBeaconDispatcher";
 import { usePageTracking } from "../viewer/telemetry/usePageTracking";
@@ -58,6 +60,27 @@ export default function DocxDocumentViewer() {
         setLoading(false);
       });
   }, [id]);
+
+  // Viewers do not join RTDB. They refresh only when the canonical compacted
+  // snapshot/version changes in Firestore.
+  useEffect(() => {
+    if (!id) return;
+    let timer: number | undefined;
+    const unsubscribe = onSnapshot(firestoreDoc(db, "documents", id), () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        void getDocumentById(id).then((next) => {
+          if (next?.sfdt !== doc?.sfdt || next?.baseVersion !== doc?.baseVersion) {
+            setDoc(next);
+          }
+        });
+      }, 300);
+    });
+    return () => {
+      window.clearTimeout(timer);
+      unsubscribe();
+    };
+  }, [doc?.baseVersion, doc?.sfdt, id]);
 
   // Reset to page 1 when the document changes.
   useEffect(() => {
@@ -131,7 +154,7 @@ export default function DocxDocumentViewer() {
       </div>
 
       <DocxViewer
-        source={doc.dataUrl ?? doc.url ?? null}
+        source={doc.sfdt ?? doc.dataUrl ?? doc.url ?? null}
         title={doc.name}
         pageCount={doc.pageCount}
         onPageChange={handlePageChange}

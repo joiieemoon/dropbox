@@ -41,6 +41,10 @@ const SenderDashboard = lazy(
   const DocxEditorPage = lazy(
     () => import("./features/documents/sender/DocxEditorPage"),
   );
+  // SANDBOX — throwaway live-collaboration spike route (delete before release).
+  const CollabSandboxPage = lazy(
+    () => import("./features/documents/sender/sandbox/CollabSandboxPage"),
+  );
 
 export const router = createBrowserRouter([
   {
@@ -70,6 +74,7 @@ export const router = createBrowserRouter([
       { path: "docx-viewer", element: <DocxViewerPage /> },
       { path: "docx-viewer/:id", element: <DocxDocumentViewer /> },
       { path: "docx-editor/:id", element: <DocxEditorPage /> },
+      { path: "collab-sandbox", element: <CollabSandboxPage /> },
 
       // Profile
       { path: "profile", element: <UserProfiles /> },

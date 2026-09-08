@@ -14,9 +14,11 @@ import {
   setDoc,
   getDoc,
   deleteDoc,
+  deleteField,
   serverTimestamp,
 } from "firebase/firestore";
-import { db, auth } from "../../../firebase";
+import { getDownloadURL, ref as storageRef, uploadString } from "firebase/storage";
+import { db, auth, storage } from "../../../firebase";
 import type { Document, Recipient, RevisionMeta, TrackingLink } from "../types";
 
 /**
@@ -43,6 +45,10 @@ export async function getDocumentById(id: string): Promise<Document | null> {
     latestPdfUrl: data.latestPdfUrl ?? undefined,
     latestDocxUrl: data.latestDocxUrl ?? undefined,
     revisions: data.revisions ?? [],
+    sfdt: data.sfdt ?? undefined,
+    sfdtStoragePath: data.sfdtStoragePath ?? undefined,
+    baseVersion: data.baseVersion ?? undefined,
+    lastEditedByAt: data.lastEditedByAt ?? undefined,
   } as Document;
 }
 
@@ -865,4 +871,64 @@ export async function listSharedDocuments(): Promise<Document[]> {
     console.error("Failed to fetch shared documents:", error);
     return [];
   }
+}
+/**
+ * Payload for persisting the current compacted SFDT snapshot + baseVersion.
+ */
+export interface DocxSnapshotMeta {
+  sfdt: string;
+  baseVersion: number;
+  by: string;
+  at: number;
+}
+
+/**
+ * Persist the compacted SFDT snapshot for live collaborative editing.
+ * - Edit seats rebase the RTDB op log against documents/{id}.baseVersion.
+ * - Viewers watch documents/{id}.sfdt and reload when it changes.
+ *
+ * Firestore rules already gate this: owner and active editors may update a document..
+ */
+export async function persistDocxSnapshot(
+  documentId: string,
+  snapshot: DocxSnapshotMeta,
+): Promise<void> {
+  const documentRef = doc(db, "documents", documentId);
+  // Firestore's 1 MiB document limit includes existing metadata and the current
+  // DOCX data URL, so keep inline snapshots deliberately small.
+  const inlineLimitBytes = 150 * 1024;
+  const snapshotBytes = new TextEncoder().encode(snapshot.sfdt).byteLength;
+  const common = {
+    baseVersion: snapshot.baseVersion,
+    lastEditedByAt: { by: snapshot.by, at: snapshot.at },
+  };
+
+  if (snapshotBytes <= inlineLimitBytes) {
+    await updateDoc(documentRef, {
+      ...common,
+      sfdt: snapshot.sfdt,
+      sfdtStoragePath: deleteField(),
+    });
+    return;
+  }
+
+  const path = `documents/${documentId}/live/snapshot.sfdt`;
+  await uploadString(storageRef(storage, path), snapshot.sfdt, "raw", {
+    contentType: "application/json",
+  });
+  await updateDoc(documentRef, {
+    ...common,
+    sfdt: deleteField(),
+    sfdtStoragePath: path,
+  });
+}
+
+/** Resolve the canonical SFDT snapshot regardless of its Firebase location. */
+export async function getDocxSnapshot(document: Document): Promise<string | null> {
+  if (document.sfdt) return document.sfdt;
+  if (!document.sfdtStoragePath) return null;
+  const url = await getDownloadURL(storageRef(storage, document.sfdtStoragePath));
+  const response = await fetch(url);
+  if (!response.ok) throw new Error("Could not load the live document snapshot.");
+  return response.text();
 }
