@@ -40,7 +40,11 @@ import type {
 } from "@syncfusion/ej2-documenteditor";
 import type { RevisionMeta } from "../../types";
 import { toastWarning } from "../../../../components/common/toast/toast";
-import { useCollaborativeEditing, type CollaborativeEditingHandlerLike } from "../hooks/useCollaborativeEditing";
+import {
+  useCollaborativeEditing,
+  type CollaborativeEditingHandlerLike,
+  type LiveCollaborator,
+} from "../hooks/useCollaborativeEditing";
 
 export const EJ2_SERVICES_URL =
   "https://document.syncfusion.com/web-services/docx-editor/api/documenteditor/";
@@ -171,6 +175,8 @@ interface DocxEditorProps {
   liveDocumentId?: string;
   baseVersion?: number;
   currentUserId?: string;
+  /** When the compacted snapshot was last persisted (drives "edited by X"). */
+  lastEditedByAt?: { by: string; at: number } | null;
   height?: string;
 }
 
@@ -191,10 +197,13 @@ export default function DocxEditor({
   liveDocumentId,
   baseVersion = 0,
   currentUserId,
+  lastEditedByAt = null,
   height = "80vh",
 }: DocxEditorProps) {
   const containerRef = useRef<ContainerType | null>(null);
   const pendingSource = useRef<File | string | null>(source);
+  const docTitleRef = useRef(title ?? "");
+  docTitleRef.current = title ?? "";
   const createdRef = useRef(false);
   const currentPageRef = useRef(1);
   const totalPagesRef = useRef(Math.max(1, pageCount));
@@ -225,6 +234,33 @@ export default function DocxEditor({
   );
 
   const [loading, setLoading] = useState(false);
+  // Mirrors `loading` for stable callbacks that must not re-bind on renders.
+  const loadingRef = useRef(loading);
+  loadingRef.current = loading;
+  // Depth guard around applyDocEditorMode(): the SDK's enableTrackChanges /
+  // showRevisions setters push documentSettingOps and fire contentChange
+  // synchronously. Those are OUR UI settings, not document edits — they must
+  // never be forwarded into the live op stream (each one would bump the
+  // broker version and toggle peers' track-changes state).
+  const modeOpSuppressDepthRef = useRef(0);
+  // Applies the mode while suppressing the settings ops the SDK setters emit
+  // (they fire contentChange synchronously — see modeOpSuppressDepthRef).
+  const applyModeQuietly = useCallback(
+    (editor: ReviewPaneEditorLike | null | undefined, nextMode: DocxEditorMode) => {
+      modeOpSuppressDepthRef.current += 1;
+      try {
+        applyDocEditorMode(editor, nextMode);
+      } finally {
+        queueMicrotask(() => {
+          modeOpSuppressDepthRef.current = Math.max(
+            0,
+            modeOpSuppressDepthRef.current - 1,
+          );
+        });
+      }
+    },
+    [],
+  );
   const [error, setError] = useState<string | null>(null);
   const [docName, setDocName] = useState(title ?? "");
   const [currentPage, setCurrentPage] = useState(1);
@@ -239,7 +275,47 @@ export default function DocxEditor({
   const liveHandlerRef = useRef<CollaborativeEditingHandlerLike | null>(null);
   const [liveHandler, setLiveHandler] =
     useState<CollaborativeEditingHandlerLike | null>(null);
+  // Tracks whether live editing was previously active within this mount, so a
+  // re-enter of Editing can reset the document to the base snapshot (rejoin
+  // replays the op log and must not double-apply).
+  const liveWasActiveRef = useRef(false);
+  const loadIntoEditorRef = useRef<
+    ((src: File | string, name: string) => Promise<void>) | null
+  >(null);
   const user = useSelector((state: RootState) => state.auth.user);
+  // True once the editor has both been created and finished opening a document.
+  // Stable identity (refs only) so the collab hook never rejoins on re-render.
+  const isEditorDocumentReady = useCallback(
+    () => !loadingRef.current && createdRef.current,
+    [],
+  );
+  // Self-heal for a broken live session (version gap / failed op apply): the
+  // hook asks us to re-base from the canonical snapshot. The live handler is
+  // torn down FIRST so the contentChange events fired while the snapshot
+  // reloads are never pushed into the room (they would re-insert the entire
+  // document), then a FRESH handler instance joins after the reload — its
+  // internal version state must start clean for the op replay to line up.
+  const handleSnapshotReloadRequired = useCallback(() => {
+    if (!pendingSource.current) return;
+    liveWasActiveRef.current = false;
+    liveHandlerRef.current = null;
+    setLiveHandler(null);
+    void loadIntoEditorRef.current
+      ?.(pendingSource.current, docTitleRef.current)
+      .then(() => {
+        if (modeRef.current !== "editing") return;
+        const editor = containerRef.current?.documentEditor;
+        if (!editor) return;
+        const collaborativeEditor = editor as typeof editor & {
+          collaborativeEditingHandlerModule?: CollaborativeEditingHandlerLike;
+        };
+        editor.enableCollaborativeEditing = true;
+        const handler = new CollaborativeEditingHandler(editor);
+        collaborativeEditor.collaborativeEditingHandlerModule = handler;
+        liveHandlerRef.current = handler;
+        setLiveHandler(handler);
+      });
+  }, []);
   // Resolve the actual editor's display name from the logged-in user profile.
   // Falls back through username → email-prefix → email → full name → name.
   const authorName =
@@ -249,38 +325,48 @@ export default function DocxEditor({
     `${user?.firstName ?? ""} ${user?.lastName ?? ""}`.trim() ||
     user?.name ||
     "Unknown User";
-  const { isLive, error: liveError } = useCollaborativeEditing({
+  const { isLive, users, error: liveError } = useCollaborativeEditing({
     enabled: mode === "editing",
     documentId: liveDocumentId,
     userId: currentUserId,
     userName: authorName,
     baseVersion,
     handler: liveHandler,
+    isEditorDocumentReady,
+    onSnapshotReloadRequired: handleSnapshotReloadRequired,
   });
-  // Phase 6 displays this in the header; retain it here while the transport is
-  // being connected so runtime failures do not affect Suggesting/Viewing.
-  void isLive;
-  void liveError;
   useEffect(() => {
     const editor = containerRef.current?.documentEditor;
     if (!editor) return;
     // Editing (live) and Viewing hide the Changes tab; only Suggesting shows
     // the Accept/Reject review sidebar.
-    applyDocEditorMode(editor, mode);
-    if (mode === "editing" && !liveHandlerRef.current) {
-      const collaborativeEditor = editor as typeof editor & {
-        collaborativeEditingHandlerModule?: CollaborativeEditingHandlerLike;
-      };
-      editor.enableCollaborativeEditing = true;
-      const handler =
-        collaborativeEditor.collaborativeEditingHandlerModule ??
-        new CollaborativeEditingHandler(editor);
-      collaborativeEditor.collaborativeEditingHandlerModule = handler;
-      liveHandlerRef.current = handler;
-      setLiveHandler(handler);
+    applyModeQuietly(editor, mode);
+    if (mode === "editing") {
+      const rejoining = liveWasActiveRef.current;
+      liveWasActiveRef.current = true;
+      if (!liveHandlerRef.current) {
+        const collaborativeEditor = editor as typeof editor & {
+          collaborativeEditingHandlerModule?: CollaborativeEditingHandlerLike;
+        };
+        editor.enableCollaborativeEditing = true;
+        const handler =
+          collaborativeEditor.collaborativeEditingHandlerModule ??
+          new CollaborativeEditingHandler(editor);
+        collaborativeEditor.collaborativeEditingHandlerModule = handler;
+        liveHandlerRef.current = handler;
+        setLiveHandler(handler);
+      }
+      // Re-entering Editing after leaving it: the room rejoins and replays the
+      // whole op log (fresh per-join session id), so the editor MUST be reset
+      // to the base snapshot first or the ops would be double-applied.
+      if (rejoining && createdRef.current && pendingSource.current) {
+        void loadIntoEditorRef.current?.(pendingSource.current, docTitleRef.current);
+      }
+    } else {
+      liveWasActiveRef.current = false;
+      setLiveHandler(null);
     }
-    if (mode !== "editing") setLiveHandler(null);
-  }, [mode]);
+  }, [applyModeQuietly, mode]);
   useEffect(() => {
     pendingSource.current = source;
   }, [source]);
@@ -344,6 +430,15 @@ export default function DocxEditor({
 
   const handleContentChange = useCallback(
     (args?: ContentChangeEventArgs) => {
+      // Document open/reload fires contentChange with settings/content
+      // batches (SDK fireContentChange emits documentSettingOps while
+      // enableCollaborativeEditing is on). Forwarding those would push the
+      // whole document into the live op stream on EVERY load — so only real
+      // user edits made after the load completes may be forwarded.
+      if (loadingRef.current || !createdRef.current) return;
+      // Settings ops emitted by our own mode application (track-changes /
+      // revisions toggles) are UI state, not document edits — never forward.
+      if (modeOpSuppressDepthRef.current > 0) return;
       if (mode === "editing" && args?.operations?.length) {
         console.debug("[DocxEditorLive] local operation", {
           count: args.operations.length,
@@ -421,7 +516,7 @@ export default function DocxEditor({
       // Apply the current mode. Only Suggesting shows the review (Accept/Reject)
       // sidebar; Editing/Viewing hide the Changes tab via the SDK
       // showRevisions=false path.
-      applyDocEditorMode(editor, modeRef.current);
+      applyModeQuietly(editor, modeRef.current);
 
       try {
         if (typeof src === "string") {
@@ -441,16 +536,16 @@ export default function DocxEditor({
         // Re-apply the current mode AFTER document loads (the editor resets
         // these flags when a document is opened). Changes tab shows only in
         // Suggesting; Editing (live) and Viewing keep it hidden.
-        applyDocEditorMode(editor, modeRef.current);
+        applyModeQuietly(editor, modeRef.current);
         // The review pane can initialize slightly after the content loads;
         // re-assert mode a couple of times so the sidebar can never flash in.
         window.setTimeout(() => {
           const lateEditor = containerRef.current?.documentEditor;
-          if (lateEditor) applyDocEditorMode(lateEditor, modeRef.current);
+          if (lateEditor) applyModeQuietly(lateEditor, modeRef.current);
         }, 400);
         window.setTimeout(() => {
           const lateEditor = containerRef.current?.documentEditor;
-          if (lateEditor) applyDocEditorMode(lateEditor, modeRef.current);
+          if (lateEditor) applyModeQuietly(lateEditor, modeRef.current);
         }, 1200);
         // Set current user so changes are tagged as tracked revisions
         editor.currentUser = authorName;
@@ -481,8 +576,9 @@ export default function DocxEditor({
         setLoading(false);
       }
     },
-    [dataUrlToFile, pageCount, refreshTotalPageCount],
+    [applyModeQuietly, dataUrlToFile, pageCount, refreshTotalPageCount],
   );
+  loadIntoEditorRef.current = loadIntoEditor;
 
   const handleCreated = useCallback(() => {
     console.log("[DocxEditor] handleCreated triggered");
@@ -492,7 +588,7 @@ export default function DocxEditor({
 
     // Only Suggesting tracks changes and shows the review (Accept/Reject)
     // sidebar; Editing (live) and Viewing keep the Changes tab hidden.
-    applyDocEditorMode(editor, mode);
+    applyModeQuietly(editor, mode);
     // Set current user so changes are tagged as tracked revisions
     editor.currentUser = authorName;
     console.log("[DocxEditor] currentUser:", editor.currentUser);
@@ -514,6 +610,7 @@ export default function DocxEditor({
       refreshTotalPageCount();
     }, 100);
   }, [
+    applyModeQuietly,
     handleViewChange,
     handleDocumentChange,
     handleContentChange,
@@ -830,6 +927,11 @@ export default function DocxEditor({
         onSave={handleSave}
         mode={mode}
         onModeChange={onModeChange}
+        isLive={isLive}
+        users={users}
+        liveError={liveError}
+        lastEditedByAt={lastEditedByAt}
+        currentUserId={currentUserId}
       />
 
       {/* {revisionActionMsg && (
@@ -1050,13 +1152,33 @@ export default function DocxEditor({
 //                   ✗ Reject
 //                 </button>
 //               </div>
-//             )}
-//           </div>
-//         ))}
-//       </div>
-//     </div>
-//   );
-// }
+/** "John Doe" → "JD"; single names use the first two letters. */
+function initialsOf(name: string): string {
+  const cleaned = (name || "?").trim();
+  const parts = cleaned.split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+  return (cleaned.slice(0, 2) || "?").toUpperCase();
+}
+
+/** Resolve a stored uid to a display name, falling back gracefully. */
+function resolveEditorName(by: string, users: LiveCollaborator[]): string {
+  const match = users.find((u) => u.id === by);
+  return match?.name || "Another editor";
+}
+
+/** Compact relative timestamp ("just now", "12s ago", "3m ago", ...). */
+function relativeEditLabel(at: number, now: number): string {
+  const delta = Math.max(0, now - at);
+  const seconds = Math.floor(delta / 1000);
+  if (seconds < 5) return "just now";
+  if (seconds < 60) return `${seconds}s ago`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return days === 1 ? "yesterday" : `${days} days ago`;
+}
 
 function DocxEditorHeader({
   name,
@@ -1069,6 +1191,11 @@ function DocxEditorHeader({
   onSave,
   mode,
   onModeChange,
+  isLive,
+  users,
+  liveError,
+  lastEditedByAt,
+  currentUserId,
 }: {
   name: string;
   loading: boolean;
@@ -1080,7 +1207,34 @@ function DocxEditorHeader({
   onSave: () => void;
   mode: DocxEditorMode;
   onModeChange?: (mode: DocxEditorMode) => void;
+  isLive: boolean;
+  users: LiveCollaborator[];
+  liveError: string | null;
+  lastEditedByAt: { by: string; at: number } | null;
+  currentUserId?: string;
 }) {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    if (!lastEditedByAt) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 15000);
+    return () => window.clearInterval(timer);
+  }, [lastEditedByAt]);
+
+  const otherEditors = users.filter((u) => u.id !== currentUserId);
+  const onlineOthers = otherEditors.slice(0, 5);
+  const typingUsers = users.filter(
+    (u) => u.typing === true && u.id !== currentUserId,
+  );
+  const presenceText = liveError
+    ? ""
+    : typingUsers.length > 0
+      ? `${typingUsers[0].name} is editing…`
+      : lastEditedByAt
+        ? `Edited by ${currentUserId && lastEditedByAt.by === currentUserId ? "you" : resolveEditorName(lastEditedByAt.by, users)} ${relativeEditLabel(lastEditedByAt.at, now)}`
+        : otherEditors.length > 0
+          ? `${otherEditors.length} online`
+          : "";
+
   return (
     <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3 dark:border-gray-700">
       <div className="flex items-center gap-2">
@@ -1101,6 +1255,47 @@ function DocxEditorHeader({
           {name || "Document"}
         </span>
       </div>
+
+      {isLive && (onlineOthers.length > 0 || lastEditedByAt || liveError) && (
+        <div className="flex min-w-0 items-center gap-2 overflow-hidden">
+          {onlineOthers.length > 0 && (
+            <div className="flex items-center">
+              {onlineOthers.map((u, i) => (
+                <span
+                  key={u.id}
+                  title={`${u.name}${u.typing === true ? " — typing…" : ""}`}
+                  className={`relative inline-flex h-7 w-7 items-center justify-center rounded-full text-[10px] font-semibold text-white ring-2 ring-white dark:ring-gray-800 ${i > 0 ? "-ml-2" : ""}`}
+                  style={{ backgroundColor: u.color || "#6366f1" }}
+                >
+                  {initialsOf(u.name)}
+                  <span
+                    className={`docx-avatar-dot ${u.typing === true ? "docx-avatar-dot--typing" : "docx-avatar-dot--idle"}`}
+                  />
+                </span>
+              ))}
+              {otherEditors.length > 5 && (
+                <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-gray-200 text-[10px] font-semibold text-gray-700 ring-2 ring-white -ml-2 dark:bg-gray-700 dark:text-gray-300">
+                  +{otherEditors.length - 5}
+                </span>
+              )}
+            </div>
+          )}
+
+          {liveError ? (
+            <span className="inline-flex min-w-0 items-center gap-1 truncate text-xs font-medium text-red-600 dark:text-red-400">
+              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-red-500" />
+              Live unavailable
+            </span>
+          ) : presenceText ? (
+            <span
+              className="min-w-0 truncate text-xs text-gray-500 dark:text-gray-400"
+              title={presenceText}
+            >
+              {presenceText}
+            </span>
+          ) : null}
+        </div>
+      )}
 
       <div className="flex items-center gap-3">
         {onModeChange && (

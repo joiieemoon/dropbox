@@ -158,12 +158,21 @@ export default function DocxEditorPage() {
           result.pageCount,
           newVersion,
         );
-        await persistDocxSnapshot(id, {
-          sfdt: result.sfdt,
-          baseVersion: doc.baseVersion ?? 0,
-          by: auth.currentUser?.uid ?? doc.ownerId ?? "unknown",
-          at: Date.now(),
-        });
+        // In live Editing mode the SFDT this editor holds is built on the
+        // RTDB op stream, whose ops may be ahead of `doc.baseVersion`.
+        // Persisting it with the stale baseVersion would advertise "snapshot
+        // = state@N with base = 0" while RTDB still holds ops 1..N — any new
+        // joiner would replay those ops on top and corrupt the document.
+        // Snapshot compaction (Phase 5) owns snapshots in Editing mode; the
+        // manual Save below still versions the DOCX export exactly as before.
+        if (editorMode !== "editing") {
+          await persistDocxSnapshot(id, {
+            sfdt: result.sfdt,
+            baseVersion: doc.baseVersion ?? 0,
+            by: auth.currentUser?.uid ?? doc.ownerId ?? "unknown",
+            at: Date.now(),
+          });
+        }
         console.log(
           "[DocxEditorPage] updateEditableDocument completed successfully. URL size:",
           updatedUrl.length,
@@ -224,7 +233,7 @@ export default function DocxEditorPage() {
         );
       }
     },
-    [id, doc],
+    [id, doc, editorMode],
   );
 
   if (loading) {
@@ -339,6 +348,7 @@ export default function DocxEditorPage() {
         liveDocumentId={id}
         baseVersion={doc.baseVersion ?? 0}
         currentUserId={auth.currentUser?.uid}
+        lastEditedByAt={doc.lastEditedByAt ?? null}
         onSave={handleSave}
         onRevisionStatusChange={handleRevisionStatusChange}
         height="75vh"

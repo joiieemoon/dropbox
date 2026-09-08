@@ -848,6 +848,31 @@ span.flatpickr-weekday,
 .docx-editor--no-changes-tab .e-de-review-pane {
   display: none !important;
 }
+/* DOCX Editor - live presence avatar status dot (Phase 6).
+   -typing: pulsing green; -idle: gray. Positioned bottom-right of the avatar. */
+.docx-avatar-dot {
+  position: absolute;
+  bottom: -1px;
+  right: -1px;
+  width: 8px;
+  height: 8px;
+  border-radius: 9999px;
+  background-color: #9ca3af;
+  box-shadow: 0 0 0 1px #fff;
+}
+.docx-avatar-dot--typing {
+  background-color: #22c55e;
+  animation: docx-typing-pulse 1s ease-in-out infinite;
+}
+@keyframes docx-typing-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 1px #fff, 0 0 0 0 rgba(34, 197, 94, 0.65);
+  }
+  50% {
+    box-shadow: 0 0 0 1px #fff, 0 0 0 6px rgba(34, 197, 94, 0);
+  }
+}
 
 /* ================================================================
    MoonDoc micro-animations

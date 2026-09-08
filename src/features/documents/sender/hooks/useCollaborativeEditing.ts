@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import type { ActionInfo, Operation } from "@syncfusion/ej2-documenteditor";
 import {
   get,
@@ -10,6 +10,7 @@ import {
   remove,
   runTransaction,
   set,
+  update,
 } from "firebase/database";
 import { getRtdb } from "../../../../firebase";
 import { generateUUID } from "../../../../utils/uuid";
@@ -26,6 +27,8 @@ export interface LiveCollaborator {
   color?: string;
   active: boolean;
   lastSeen: number;
+  /** True while this collaborator is actively sending operations. */
+  typing?: boolean;
 }
 
 interface UseCollaborativeEditingOptions {
@@ -38,6 +41,12 @@ interface UseCollaborativeEditingOptions {
   handler?: CollaborativeEditingHandlerLike | null;
   /** Called when the operation log has a gap and the editor must reload SFDT. */
   onSnapshotReloadRequired?: () => void;
+  /**
+   * True only while the editor's document is fully loaded and safe to apply
+   * remote operations. When false, remote ops are buffered in order instead of
+   * being applied (avoids applying ops into an empty/partially-open document).
+   */
+  isEditorDocumentReady?: () => boolean;
 }
 
 interface UseCollaborativeEditingResult {
@@ -64,13 +73,35 @@ function removeUndefined<T>(value: T): T {
   return value;
 }
 
+/** Deterministic avatar colors shared by every client for the same user id. */
+const PRESENCE_COLORS = [
+  "#ef4444",
+  "#f97316",
+  "#f59e0b",
+  "#22c55e",
+  "#14b8a6",
+  "#0ea5e9",
+  "#6366f1",
+  "#a855f7",
+  "#ec4899",
+  "#84cc16",
+];
+
+function presenceColor(seed: string): string {
+  let hash = 0;
+  for (let i = 0; i < seed.length; i++) {
+    hash = (hash * 31 + seed.charCodeAt(i)) & 0x7fffffff;
+  }
+  return PRESENCE_COLORS[hash % PRESENCE_COLORS.length];
+}
+
 /**
  * RTDB transport for Syncfusion's collaborative editing handler.
  *
  * The caller owns loading the matching SFDT snapshot before enabling this
  * hook. This module only brokers ordered OT operations and presence.
  */
-export function  useCollaborativeEditing({
+export function useCollaborativeEditing({
   enabled,
   documentId,
   userId,
@@ -78,8 +109,8 @@ export function  useCollaborativeEditing({
   baseVersion = 0,
   handler,
   onSnapshotReloadRequired,
+  isEditorDocumentReady,
 }: UseCollaborativeEditingOptions): UseCollaborativeEditingResult {
-  const sessionId = useRef(generateUUID()).current;
   const [isLive, setIsLive] = useState(false);
   const [users, setUsers] = useState<LiveCollaborator[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -104,6 +135,10 @@ export function  useCollaborativeEditing({
     let ready = false;
     let lastAppliedVersion = baseVersion;
     let applying = false;
+    // Fresh per join: a rejoin replays this browser's PREVIOUS ops as remote
+    // (they must be re-applied after a snapshot reload). Keeping a single
+    // session id across joins would echo-filter them away and corrupt the doc.
+    const joinSessionId = generateUUID();
     const pending = new Map<number, { action: string; data: ActionInfo; local: boolean }>();
     const originalSendAction = handler.sendActionToServer;
     const root = `documents/${documentId}`;
@@ -111,11 +146,54 @@ export function  useCollaborativeEditing({
     const opsRef = ref(database, `${root}/ops`);
     const presenceRef = ref(database, `${root}/presence/${userId}`);
 
+    // Typing heartbeat: flip presence.typing on while this client sends ops,
+    // and back to false after a short silence (throttled to one RTDB write/s).
+    let lastTypingPulse = 0;
+    let typingTimer: number | undefined;
+    const pulseTyping = () => {
+      if (disposed) return;
+      const now = Date.now();
+      if (typingTimer !== undefined) window.clearTimeout(typingTimer);
+      typingTimer = window.setTimeout(() => {
+        typingTimer = undefined;
+        if (disposed) return;
+        void update(presenceRef, { typing: false, lastSeen: Date.now() });
+      }, 1500);
+      if (now - lastTypingPulse < 1000) return;
+      lastTypingPulse = now;
+      void update(presenceRef, { typing: true, lastSeen: now });
+    };
+
     // Safety net for a lost operation (e.g. a client that incremented the
     // sequence but crashed before writing its op). If the next expected version
     // never appears, tell the caller to reload the compacted SFDT snapshot so
     // this editor re-bases instead of stalling forever.
     let gapWatchdog: number | undefined;
+    let retryTimer: number | undefined;
+    let errorClearTimer: number | undefined;
+    const scheduleDrainRetry = () => {
+      if (retryTimer !== undefined || disposed) return;
+      retryTimer = window.setTimeout(() => {
+        retryTimer = undefined;
+        drain();
+      }, 150);
+    };
+
+    // Non-sticky apply error: show it, then auto-clear so "Live unavailable"
+    // resolves itself once the room recovers instead of persisting forever.
+    const reportApplyError = (cause: unknown) => {
+      pending.clear();
+      setError(
+        cause instanceof Error ? cause.message : "Could not apply a live operation.",
+      );
+      if (errorClearTimer !== undefined) window.clearTimeout(errorClearTimer);
+      errorClearTimer = window.setTimeout(() => {
+        errorClearTimer = undefined;
+        if (!disposed) setError(null);
+      }, 6000);
+      onSnapshotReloadRequired?.();
+    };
+
     const armGapWatchdog = () => {
       if (gapWatchdog !== undefined || disposed) return;
       gapWatchdog = window.setTimeout(() => {
@@ -130,6 +208,13 @@ export function  useCollaborativeEditing({
 
     const drain = () => {
       if (applying || disposed) return;
+      // Wait until the document is actually open before applying remote ops.
+      // A remote op applied into an empty/loading editor makes the OT engine
+      // throw, which previously wedged the room into "Live unavailable".
+      if (isEditorDocumentReady && !isEditorDocumentReady()) {
+        scheduleDrainRetry();
+        return;
+      }
       applying = true;
       try {
         for (;;) {
@@ -146,8 +231,8 @@ export function  useCollaborativeEditing({
           armGapWatchdog();
         }
       } catch (cause) {
-        setError(cause instanceof Error ? cause.message : "Could not apply a live operation.");
-        onSnapshotReloadRequired?.();
+        console.warn("[LiveCollab] apply failed", { documentId, cause });
+        reportApplyError(cause);
       } finally {
         applying = false;
       }
@@ -155,6 +240,11 @@ export function  useCollaborativeEditing({
 
     handler.sendActionToServer = (operations) => {
       if (!ready || disposed || operations.length === 0) return;
+      // Authoritative load gate: openAsync fires fireContentChange batches
+      // (document settings + content) while the document is being opened or
+      // reloaded. Pushing them would duplicate the whole document on every
+      // peer and pollute the op log on every page load. Same gate as drain().
+      if (isEditorDocumentReady && !isEditorDocumentReady()) return;
       void (async () => {
         try {
           // Clamp the sequence to baseVersion so post-compaction rooms (where
@@ -179,12 +269,13 @@ export function  useCollaborativeEditing({
             action: "action",
             data,
             userId,
-            senderSessionId: sessionId,
+            senderSessionId: joinSessionId,
             timestamp: Date.now(),
           });
           console.debug("[LiveCollab] operation sent", { documentId, version });
           pending.set(version, { action: "action", data, local: true });
           drain();
+          pulseTyping();
           setCompactionNeeded((needed) => needed || version - baseVersion >= 100);
         } catch (cause) {
           setError(cause instanceof Error ? cause.message : "Could not send a live operation.");
@@ -194,7 +285,13 @@ export function  useCollaborativeEditing({
 
     handler.updateRoomInfo(documentId, baseVersion, "");
     handler.applyRemoteAction("connectionId", userId);
-    void set(presenceRef, { name: userName, active: true, lastSeen: Date.now() });
+    void set(presenceRef, {
+      name: userName,
+      color: presenceColor(userId),
+      active: true,
+      lastSeen: Date.now(),
+      typing: false,
+    });
     const disconnect = onDisconnect(presenceRef);
     void disconnect.remove();
 
@@ -220,7 +317,7 @@ export function  useCollaborativeEditing({
             senderSessionId?: string;
           } | null;
           if (!op || op.data.version === undefined || op.data.version <= baseVersion) return;
-          if (op.senderSessionId === sessionId) return;
+          if (op.senderSessionId === joinSessionId) return;
           console.debug("[LiveCollab] operation received", {
             documentId,
             version: op.data.version,
@@ -234,13 +331,18 @@ export function  useCollaborativeEditing({
     return () => {
       disposed = true;
       if (gapWatchdog !== undefined) window.clearTimeout(gapWatchdog);
+      if (retryTimer !== undefined) window.clearTimeout(retryTimer);
+      if (errorClearTimer !== undefined) window.clearTimeout(errorClearTimer);
+      if (typingTimer !== undefined) window.clearTimeout(typingTimer);
       handler.sendActionToServer = originalSendAction;
       unsubscribeOps?.();
       unsubscribePresence();
       void remove(presenceRef);
       handler.applyRemoteAction("removeUser", userId);
     };
-  }, [baseVersion, documentId, enabled, handler, onSnapshotReloadRequired, sessionId, userId, userName]);
+  // Note: joinSessionId is intentionally per-run (created inside the effect)
+  // and deliberately not a dependency — its identity changes every run.
+  }, [baseVersion, documentId, enabled, handler, isEditorDocumentReady, onSnapshotReloadRequired, userId, userName]);
 
   return { isLive, users, error, compactionNeeded };
 }
