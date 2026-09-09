@@ -1,6 +1,9 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import DocxEditor, { type DocxEditorSaveResult, type DocxEditorMode } from "./components/DocxEditor";
+import DocxEditor, {
+  type DocxEditorSaveResult,
+  type DocxEditorMode,
+} from "./components/DocxEditor";
 import {
   getDocumentById,
   getDocumentAccessRole,
@@ -34,6 +37,43 @@ export default function DocxEditorPage() {
   const [editorsLoading, setEditorsLoading] = useState(false);
   const [togglingEditorId, setTogglingEditorId] = useState<string | null>(null);
   const { isMobile } = useSidebar();
+
+  // --- "Save on leave" handling ---
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const saveNowRef = useRef<() => Promise<void>>(async () => {});
+
+  const handleSaveNowReady = useCallback((fn: () => Promise<void>) => {
+    saveNowRef.current = fn;
+  }, []);
+
+  // In-app back button: directly save then navigate (no modal).
+  const handleBackClick = useCallback(async () => {
+    if (hasUnsavedChanges) {
+      setIsSaving(true);
+      try {
+        await saveNowRef.current();
+      } catch (cause) {
+        console.error("[DocxEditorPage] save before leave failed:", cause);
+      }
+      setIsSaving(false);
+    }
+    navigate("/docx-viewer");
+  }, [hasUnsavedChanges, navigate]);
+
+  // Browser back/reload/close: native confirmation + best-effort save.
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (!hasUnsavedChanges) return;
+      // Best-effort save (fire-and-forget — browser may still kill the page).
+      void saveNowRef.current();
+      // Native browser confirmation dialog.
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [hasUnsavedChanges]);
   useEffect(() => {
     if (!id) return;
     setLoading(true);
@@ -52,9 +92,14 @@ export default function DocxEditorPage() {
         // Prefer the compacted canonical state once it exists. Legacy
         // documents remain fully supported through their DOCX/data URL.
         try {
-          setEditorSource((await getDocxSnapshot(d)) ?? d.dataUrl ?? d.url ?? null);
+          setEditorSource(
+            (await getDocxSnapshot(d)) ?? d.dataUrl ?? d.url ?? null,
+          );
         } catch (snapshotError) {
-          console.warn("[DocxEditorPage] Failed to load SFDT snapshot; using DOCX", snapshotError);
+          console.warn(
+            "[DocxEditorPage] Failed to load SFDT snapshot; using DOCX",
+            snapshotError,
+          );
           setEditorSource(d.dataUrl ?? d.url ?? null);
         }
       })
@@ -125,6 +170,34 @@ export default function DocxEditorPage() {
         );
       } catch (e) {
         console.error("[DocxEditorPage] Failed to update revision status:", e);
+      }
+    },
+    [id],
+  );
+
+  // Autosave (Option A) persisted a new compacted snapshot, so the local
+  // document's baseVersion is bumped to the saved version — that is what
+  // re-bases the room for the next autosave/refresh cycle. We ALSO re-fetch
+  // the document + snapshot so a later self-heal reload (`pendingSource`)
+  // re-opens the LATEST state instead of the stale mount-time source.
+  const handleAutosaved = useCallback(
+    async (newBaseVersion: number) => {
+      console.log(
+        "[DocxEditorPage] Autosave persisted snapshot, re-basing to",
+        newBaseVersion,
+      );
+      if (!id) return;
+      try {
+        const fresh = await getDocumentById(id);
+        if (!fresh) return;
+        setDoc(fresh);
+        const snapshot = await getDocxSnapshot(fresh);
+        if (snapshot) setEditorSource(snapshot);
+      } catch (e) {
+        console.warn(
+          "[DocxEditorPage] Could not refresh snapshot after autosave",
+          e,
+        );
       }
     },
     [id],
@@ -291,23 +364,28 @@ export default function DocxEditorPage() {
         <div className="flex items-center gap-3">
           <button
             type="button"
-            onClick={() => navigate("/docx-viewer")}
-            className="rounded-lg border border-gray-300 p-1.5 text-gray-700 transition hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+            onClick={handleBackClick}
+            disabled={isSaving}
+            className="rounded-lg border border-gray-300 p-1.5 text-gray-700 transition hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800 disabled:opacity-50"
             aria-label="Back to Word Documents"
           >
-            <svg
-              className="h-4 w-4"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18"
-              />
-            </svg>
+            {isSaving ? (
+              <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-gray-400 border-t-transparent" />
+            ) : (
+              <svg
+                className="h-4 w-4"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18"
+                />
+              </svg>
+            )}
           </button>
           <div>
             <h1 className="text-xl font-semibold text-gray-800 dark:text-white">
@@ -349,8 +427,11 @@ export default function DocxEditorPage() {
         baseVersion={doc.baseVersion ?? 0}
         currentUserId={auth.currentUser?.uid}
         lastEditedByAt={doc.lastEditedByAt ?? null}
+        onAutosaved={handleAutosaved}
         onSave={handleSave}
         onRevisionStatusChange={handleRevisionStatusChange}
+        onUnsavedChangesChange={setHasUnsavedChanges}
+        onSaveNowReady={handleSaveNowReady}
         height="75vh"
       />
 
@@ -484,6 +565,7 @@ export default function DocxEditorPage() {
           )}
         </div>
       )}
+
     </div>
   );
 }

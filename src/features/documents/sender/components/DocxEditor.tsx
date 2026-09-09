@@ -42,9 +42,12 @@ import type { RevisionMeta } from "../../types";
 import { toastWarning } from "../../../../components/common/toast/toast";
 import {
   useCollaborativeEditing,
+  useAutoSave,
+  type AutosaveStatus,
   type CollaborativeEditingHandlerLike,
   type LiveCollaborator,
 } from "../hooks/useCollaborativeEditing";
+import { persistDocxSnapshot } from "../../api/documentsApi";
 
 export const EJ2_SERVICES_URL =
   "https://document.syncfusion.com/web-services/docx-editor/api/documenteditor/";
@@ -177,6 +180,12 @@ interface DocxEditorProps {
   currentUserId?: string;
   /** When the compacted snapshot was last persisted (drives "edited by X"). */
   lastEditedByAt?: { by: string; at: number } | null;
+  /** Called after a successful autosave so the page can re-base baseVersion. */
+  onAutosaved?: (newBaseVersion: number) => void;
+  /** Called when the unsaved-changes state changes (for navigation blocking). */
+  onUnsavedChangesChange?: (hasUnsavedChanges: boolean) => void;
+  /** Called with the immediate-save function (for "Save & Leave" button). */
+  onSaveNowReady?: (saveNow: () => Promise<void>) => void;
   height?: string;
 }
 
@@ -198,6 +207,9 @@ export default function DocxEditor({
   baseVersion = 0,
   currentUserId,
   lastEditedByAt = null,
+  onAutosaved,
+  onUnsavedChangesChange,
+  onSaveNowReady,
   height = "80vh",
 }: DocxEditorProps) {
   const containerRef = useRef<ContainerType | null>(null);
@@ -325,16 +337,69 @@ export default function DocxEditor({
     `${user?.firstName ?? ""} ${user?.lastName ?? ""}`.trim() ||
     user?.name ||
     "Unknown User";
-  const { isLive, users, error: liveError } = useCollaborativeEditing({
-    enabled: mode === "editing",
-    documentId: liveDocumentId,
-    userId: currentUserId,
-    userName: authorName,
-    baseVersion,
-    handler: liveHandler,
-    isEditorDocumentReady,
-    onSnapshotReloadRequired: handleSnapshotReloadRequired,
+  const { isLive, users, error: liveError, compactionNeeded, currentVersion } =
+    useCollaborativeEditing({
+      enabled: mode === "editing",
+      documentId: liveDocumentId,
+      userId: currentUserId,
+      userName: authorName,
+      baseVersion,
+      handler: liveHandler,
+      isEditorDocumentReady,
+      onSnapshotReloadRequired: handleSnapshotReloadRequired,
+    });
+
+  // Option A autosave: no manual Save in live Editing; the compacted SFDT is
+  // persisted on compactionNeeded (idle) and on visibilitychange:hidden.
+  const captureSfdt = useCallback(async () => {
+    const container = containerRef.current;
+    const editor = container?.documentEditor;
+    if (!editor) return null;
+    try {
+      const sfdt = editor.serialize();
+      return typeof sfdt === "string" && sfdt.trim().length > 0 ? sfdt : null;
+    } catch (cause) {
+      console.error("[LiveCollab] autosave: serialize failed", cause);
+      return null;
+    }
+  }, []);
+
+  const persistSnapshot = useCallback(
+    async (sfdt: string, newBaseVersion: number) => {
+      if (!liveDocumentId) throw new Error("No live document id for autosave.");
+      await persistDocxSnapshot(liveDocumentId, {
+        sfdt,
+        baseVersion: newBaseVersion,
+        by: currentUserId ?? "unknown",
+        at: Date.now(),
+      });
+    },
+    [currentUserId, liveDocumentId],
+  );
+
+  const { autosaveStatus, lastSavedAt, hasUnsavedChanges, saveNow } = useAutoSave({
+    documentId: liveDocumentId ?? "",
+    enabled: !!liveDocumentId,
+    documentReady: isEditorDocumentReady(),
+    compactionNeeded,
+    currentVersion,
+    onlineCount: users.length,
+    captureSfdt,
+    persistSnapshot,
+    onSnapshotPersisted: (newBaseVersion) => onAutosaved?.(newBaseVersion),
+    // localStorage key for the unload backup — each document gets its own slot.
+    localStorageKey: liveDocumentId ? `livecollab:backup:${liveDocumentId}` : undefined,
   });
+
+  // Notify parent when unsaved-changes state changes (for navigation blocking).
+  useEffect(() => {
+    onUnsavedChangesChange?.(hasUnsavedChanges);
+  }, [hasUnsavedChanges, onUnsavedChangesChange]);
+
+  // Expose the immediate-save function to the parent (for "Save & Leave" button).
+  useEffect(() => {
+    onSaveNowReady?.(saveNow);
+  }, [saveNow, onSaveNowReady]);
   useEffect(() => {
     const editor = containerRef.current?.documentEditor;
     if (!editor) return;
@@ -915,16 +980,14 @@ export default function DocxEditor({
   }
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
+    <div data-saving={saving} className="rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
       <DocxEditorHeader
         name={docName}
         loading={loading}
-        saving={saving}
         currentPage={currentPage}
         totalPages={totalPages}
         onPrev={goPrev}
         onNext={goNext}
-        onSave={handleSave}
         mode={mode}
         onModeChange={onModeChange}
         isLive={isLive}
@@ -932,6 +995,8 @@ export default function DocxEditor({
         liveError={liveError}
         lastEditedByAt={lastEditedByAt}
         currentUserId={currentUserId}
+        autosaveStatus={autosaveStatus}
+        lastSavedAt={lastSavedAt}
       />
 
       {/* {revisionActionMsg && (
@@ -1183,12 +1248,10 @@ function relativeEditLabel(at: number, now: number): string {
 function DocxEditorHeader({
   name,
   loading,
-  saving,
   currentPage,
   totalPages,
   onPrev,
   onNext,
-  onSave,
   mode,
   onModeChange,
   isLive,
@@ -1196,15 +1259,15 @@ function DocxEditorHeader({
   liveError,
   lastEditedByAt,
   currentUserId,
+  autosaveStatus,
+  lastSavedAt,
 }: {
   name: string;
   loading: boolean;
-  saving: boolean;
   currentPage: number;
   totalPages: number;
   onPrev: () => void;
   onNext: () => void;
-  onSave: () => void;
   mode: DocxEditorMode;
   onModeChange?: (mode: DocxEditorMode) => void;
   isLive: boolean;
@@ -1212,13 +1275,15 @@ function DocxEditorHeader({
   liveError: string | null;
   lastEditedByAt: { by: string; at: number } | null;
   currentUserId?: string;
+  autosaveStatus: AutosaveStatus;
+  lastSavedAt: number | null;
 }) {
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
-    if (!lastEditedByAt) return;
+    if (!lastEditedByAt && !lastSavedAt) return;
     const timer = window.setInterval(() => setNow(Date.now()), 15000);
     return () => window.clearInterval(timer);
-  }, [lastEditedByAt]);
+  }, [lastEditedByAt, lastSavedAt]);
 
   const otherEditors = users.filter((u) => u.id !== currentUserId);
   const onlineOthers = otherEditors.slice(0, 5);
@@ -1318,6 +1383,21 @@ function DocxEditorHeader({
           </span>
         </span>
 
+        {/* Autosave status indicator — shown only in live Editing mode */}
+        {isLive && (
+          <span className="inline-flex min-w-0 items-center gap-1 truncate text-xs text-gray-500 dark:text-gray-400" title="Changes are saved automatically — no manual Save needed">
+            {autosaveStatus === "saving" ? (
+              "Saving…"
+            ) : autosaveStatus === "failed" ? (
+              <span className="text-red-600 dark:text-red-400">Autosave failed — retrying</span>
+            ) : lastSavedAt ? (
+              `Saved · last edited ${relativeEditLabel(lastSavedAt, now)}`
+            ) : (
+              "Auto-save on"
+            )}
+          </span>
+        )}
+
         <div className="flex items-center gap-1">
           <button
             type="button"
@@ -1341,37 +1421,6 @@ function DocxEditorHeader({
             Next →
           </button>
         </div>
-
-        <button
-          type="button"
-          onClick={onSave}
-          disabled={saving || loading}
-          className="inline-flex items-center gap-2 rounded-lg bg-emerald-500 px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-emerald-600 disabled:opacity-60"
-        >
-          {saving ? (
-            <>
-              <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
-              Saving…
-            </>
-          ) : (
-            <>
-              <svg
-                className="h-4 w-4"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={2}
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M9 12.75L11.25 15 15 9.75M16 20H4a2 2 0 01-2-2V6a2 2 0 012-2h12a2 2 0 012 2v12a2 2 0 01-2 2z"
-                />
-              </svg>
-              Save
-            </>
-          )}
-        </button>
       </div>
     </div>
   );

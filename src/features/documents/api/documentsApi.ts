@@ -201,7 +201,7 @@ export async function registerEditableDocument(
     latestDocxUrl: dataUrl,
     latestPdfUrl: "",
     pageCount,
-    sizeBytes: file.size,
+    sizeBytes: file.size,     
     sharedWith: [],
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
